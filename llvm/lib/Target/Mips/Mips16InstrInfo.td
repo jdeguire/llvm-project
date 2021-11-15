@@ -20,10 +20,12 @@ def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 // Address operand
 def mem16 : Operand<i32> {
   let PrintMethod = "printMemOperand";
-  let MIOperandInfo = (ops CPU16Regs, simm16);
+  let MIOperandInfo = (ops CPU16Opnd, simm16);
   let EncoderMethod = "getMemEncoding";
 }
 
+// TODO: This will probably need to go away if the seprate SP-relative operand works. It won't work
+//       anyway because using SP is actually a different instruction code, not just an operand.
 def mem16sp : Operand<i32> {
   let PrintMethod = "printMemOperand";
   // This should be CPUSPReg but the MIPS16 subtarget isn't good enough at
@@ -32,17 +34,40 @@ def mem16sp : Operand<i32> {
   // emitted by -verify-machineinstrs and the output ends up correct as long
   // as we use an external assembler (which is already a requirement for MIPS16
   // for several other reasons).
-  let MIOperandInfo = (ops CPU16RegsPlusSP, simm16);
+  let MIOperandInfo = (ops CPU16OpndPlusSP, simm16);
   let EncoderMethod = "getMemEncoding";
 }
 
 def mem16_ea : Operand<i32> {
   let PrintMethod = "printMemOperandEA";
-  let MIOperandInfo = (ops CPU16RegsPlusSP, simm16);
+  let MIOperandInfo = (ops CPU16OpndPlusSP, simm16);
   let EncoderMethod = "getMemEncoding";
 }
 
 def pcrel16 : Operand<i32>;
+
+// TODO: Use these to make "$pc", "$sp", and "$ra" operands for PC-, SP-, and RA-relative instructions.
+//def MemBarrierOptOperand : AsmOperandClass {
+//  let Name = "MemBarrierOpt";
+//  let ParserMethod = "parseMemBarrierOptOperand";
+//}
+//def memb_opt : Operand<i32> {
+//  let PrintMethod = "printMemBOption";
+//  let ParserMatchClass = MemBarrierOptOperand;
+//  let DecoderMethod = "DecodeMemBarrierOption";
+//}
+// TODO: Define a predicate method that can be used by all three of these.
+def Mips16PCrelPseudoRegOperand : AsmOperandClass {
+  let Name = "Mips16PCrelPseudoReg";
+  let ParserMethod = "parseMips16PCrelPseudoReg";
+  let PredicateMethod = "isMips16PseudoReg";
+}
+def pcrel_pseudo : Operand<i32> {
+  let PrintMethod = "printMips16PCrelPseudoReg";
+  let ParserMatchClass = Mips16PCrelPseudoRegOperand;
+}
+
+
 
 //
 // I-type instruction format
@@ -79,7 +104,7 @@ class FI816_SP_ins<bits<3> _func, string asmstr,
 
 class FRI16_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
-  FRI16<op, (outs CPU16Regs:$rx), (ins simm16:$imm),
+  FRI16<op, (outs CPU16Opnd:$rx), (ins simm16:$imm),
         !strconcat(asmstr, asmstr2), [], itin>;
 
 class FRI16_ins<bits<5> op, string asmstr,
@@ -88,12 +113,12 @@ class FRI16_ins<bits<5> op, string asmstr,
 
 class FRI16_TCP_ins<bits<5> _op, string asmstr,
                     InstrItinClass itin>:
-  FRI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm, i32imm:$size),
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm, i32imm:$size),
             !strconcat(asmstr, "\t$rx, $imm\t# 16 bit inst"), [], itin>;
 
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
-  FRI16<op, (outs), (ins CPU16Regs:$rx, simm16:$imm),
+  FRI16<op, (outs), (ins CPU16Opnd:$rx, simm16:$imm),
         !strconcat(asmstr, asmstr2), [], itin>;
 
 class FRI16R_ins<bits<5> op, string asmstr,
@@ -102,14 +127,14 @@ class FRI16R_ins<bits<5> op, string asmstr,
 
 class F2RI16_ins<bits<5> _op, string asmstr,
                      InstrItinClass itin>:
-  FRI16<_op, (outs CPU16Regs:$rx), (ins CPU16Regs:$rx_, simm16:$imm),
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm),
         !strconcat(asmstr, "\t$rx, $imm\t# 16 bit inst"), [], itin> {
   let Constraints = "$rx_ = $rx";
 }
 
 class FRI16_B_ins<bits<5> _op, string asmstr,
                   InstrItinClass itin>:
-  FRI16<_op, (outs), (ins  CPU16Regs:$rx, brtarget:$imm),
+  FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget:$imm),
         !strconcat(asmstr, "\t$rx, $imm  # 16 bit inst"), [], itin>;
 //
 // Compare a register and immediate and place result in CC
@@ -118,7 +143,7 @@ class FRI16_B_ins<bits<5> _op, string asmstr,
 // EXT-CCRR Instruction format
 //
 class FEXT_CCRXI16_ins<string asmstr>:
-  MipsPseudo16<(outs CPU16Regs:$cc), (ins CPU16Regs:$rx, simm16:$imm),
+  MipsPseudo16<(outs CPU16Opnd:$cc), (ins CPU16Opnd:$rx, simm16:$imm),
                !strconcat(asmstr, "\t$rx, $imm\n\tmove\t$cc, $$t8"), []> {
   let isCodeGenOnly=1;
   let usesCustomInserter = 1;
@@ -157,16 +182,16 @@ class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
 
 class FEXT_I816_ins_base<bits<3> _func, string asmstr,
                          string asmstr2, InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins simm16:$imm), !strconcat(asmstr, asmstr2),
+  FEXT_I816<_func, (outs), (ins simm16:$imm16), !strconcat(asmstr, asmstr2),
             [], itin>;
 
 class FEXT_I816_ins<bits<3> _func, string asmstr,
                     InstrItinClass itin>:
-  FEXT_I816_ins_base<_func, asmstr, "\t$imm", itin>;
+  FEXT_I816_ins_base<_func, asmstr, "\t$imm16", itin>;
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
                        InstrItinClass itin>:
-      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm", itin>;
+      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16", itin>;
 
 //
 // Assembler formats in alphabetical order.
@@ -178,7 +203,7 @@ class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
 // CC-RR Instruction format
 //
 class FCCRR16_ins<string asmstr> :
-  MipsPseudo16<(outs CPU16Regs:$cc), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  MipsPseudo16<(outs CPU16Opnd:$cc), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
                !strconcat(asmstr, "\t$rx, $ry\n\tmove\t$cc, $$t8"), []> {
   let isCodeGenOnly=1;
   let usesCustomInserter = 1;
@@ -190,39 +215,43 @@ class FCCRR16_ins<string asmstr> :
 
 class FEXT_RI16_ins_base<bits<5> _op, string asmstr, string asmstr2,
                          InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins simm16:$imm),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins simm16:$imm16),
                   !strconcat(asmstr, asmstr2), [], itin>;
 
 class FEXT_RI16_ins<bits<5> _op, string asmstr,
                     InstrItinClass itin>:
-  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm", itin>;
+  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
 
 class FEXT_RI16R_ins_base<bits<5> _op, string asmstr, string asmstr2,
                          InstrItinClass itin>:
-  FEXT_RI16<_op, (outs ), (ins CPU16Regs:$rx, simm16:$imm),
+  FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, simm16:$imm16),
                   !strconcat(asmstr, asmstr2), [], itin>;
 
 class FEXT_RI16R_ins<bits<5> _op, string asmstr,
                     InstrItinClass itin>:
-  FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm", itin>;
+  FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
 
 class FEXT_RI16_PC_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $$pc, $imm", itin>;
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcrel_pseudo:$pseudo, simm16:$imm16),
+                  !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
+//  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins CPUPCReg:$pr, simm16:$imm16),
+//                  !strconcat(asmstr, "\t$rx, $pr, $imm16"), [], itin>;
+//  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $$pc, $imm16", itin>;
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
                       InstrItinClass itin>:
-  FEXT_RI16<_op, (outs), (ins  CPU16Regs:$rx, brtarget:$imm),
-            !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
+  FEXT_RI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget:$imm16),
+            !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr,
                         InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm, i32imm:$size),
-            !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm16, i32imm:$size),
+            !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_2RI16_ins<bits<5> _op, string asmstr,
                      InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins CPU16Regs:$rx_, simm16:$imm),
-            !strconcat(asmstr, "\t$rx, $imm"), [], itin> {
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm16),
+            !strconcat(asmstr, "\t$rx, $imm16"), [], itin> {
   let Constraints = "$rx_ = $rx";
 }
 
@@ -232,12 +261,12 @@ class FEXT_2RI16_ins<bits<5> _op, string asmstr,
 
 class FEXT_RRI16_mem_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
-  FEXT_RRI16<op, (outs CPU16Regs:$ry), (ins  MemOpnd:$addr),
+  FEXT_RRI16<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
              !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
 
 class FEXT_RRI16_mem2_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
-  FEXT_RRI16<op, (outs ), (ins  CPU16Regs:$ry, MemOpnd:$addr),
+  FEXT_RRI16<op, (outs ), (ins  CPU16Opnd:$ry, MemOpnd:$addr),
              !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
 
 //
@@ -247,14 +276,14 @@ class FEXT_RRI16_mem2_ins<bits<5> op, string asmstr, Operand MemOpnd,
 
 class FEXT_RRI_A16_mem_ins<bits<1> op, string asmstr, Operand MemOpnd,
                            InstrItinClass itin>:
-  FEXT_RRI_A16<op, (outs CPU16Regs:$ry), (ins  MemOpnd:$addr),
+  FEXT_RRI_A16<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
                !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
 
 //
 // EXT-SHIFT instruction format
 //
 class FEXT_SHIFT16_ins<bits<2> _f, string asmstr, InstrItinClass itin>:
-  FEXT_SHIFT16<_f, (outs CPU16Regs:$rx), (ins CPU16Regs:$ry, uimm5:$sa),
+  FEXT_SHIFT16<_f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry, uimm5:$sa),
                !strconcat(asmstr, "\t$rx, $ry, $sa"), [], itin>;
 
 //
@@ -262,7 +291,7 @@ class FEXT_SHIFT16_ins<bits<2> _f, string asmstr, InstrItinClass itin>:
 //
 class FEXT_T8I816_ins<string asmstr, string asmstr2>:
   MipsPseudo16<(outs),
-               (ins CPU16Regs:$rx, CPU16Regs:$ry, brtarget:$imm),
+               (ins CPU16Opnd:$rx, CPU16Opnd:$ry, brtarget:$imm),
                !strconcat(asmstr2, !strconcat("\t$rx, $ry\n\t",
                !strconcat(asmstr, "\t$imm"))),[]> {
   let isCodeGenOnly=1;
@@ -274,7 +303,7 @@ class FEXT_T8I816_ins<string asmstr, string asmstr2>:
 //
 class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
   MipsPseudo16<(outs),
-               (ins CPU16Regs:$rx, simm16:$imm, brtarget:$targ),
+               (ins CPU16Opnd:$rx, simm16:$imm, brtarget:$targ),
                !strconcat(asmstr2, !strconcat("\t$rx, $imm\n\t",
                !strconcat(asmstr, "\t$targ"))), []> {
   let isCodeGenOnly=1;
@@ -287,7 +316,7 @@ class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
 // I8_MOVR32 instruction format (used only by the MOVR32 instructio
 //
 class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
-       FI8_MOVR3216<(outs CPU16Regs:$rz), (ins GPR32:$r32),
+       FI8_MOVR3216<(outs CPU16Opnd:$rz), (ins GPR32:$r32),
        !strconcat(asmstr,  "\t$rz, $r32"), [], itin>;
 
 //
@@ -295,7 +324,7 @@ class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
 //
 
 class FI8_MOV32R16_ins<string asmstr, InstrItinClass itin>:
-  FI8_MOV32R16<(outs GPR32:$r32), (ins CPU16Regs:$rz),
+  FI8_MOV32R16<(outs GPR32:$r32), (ins CPU16Opnd:$rz),
                !strconcat(asmstr,  "\t$r32, $rz"), [], itin>;
 
 //
@@ -305,14 +334,14 @@ class FI8_MOV32R16_ins<string asmstr, InstrItinClass itin>:
 // MULT
 //
 class FMULT16_ins<string asmstr> :
-  MipsPseudo16<(outs), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  MipsPseudo16<(outs), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
                !strconcat(asmstr, "\t$rx, $ry"), []>;
 
 //
 // MULT-LO
 //
 class FMULT16_LO_ins<string asmstr> :
-  MipsPseudo16<(outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  MipsPseudo16<(outs CPU16Opnd:$rz), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
                !strconcat(asmstr, "\t$rx, $ry\n\tmflo\t$rz"), []> {
   let isCodeGenOnly=1;
 }
@@ -322,7 +351,7 @@ class FMULT16_LO_ins<string asmstr> :
 //
 
 class FRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
-  FRR16<f, (outs CPU16Regs:$rx), (ins CPU16Regs:$ry),
+  FRR16<f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
 }
 
@@ -332,34 +361,34 @@ class FRRBreakNull16_ins<string asmstr, InstrItinClass itin> :
 }
 
 class FRR16R_ins<bits<5> f, string asmstr, InstrItinClass itin> :
-  FRR16<f, (outs), (ins  CPU16Regs:$rx, CPU16Regs:$ry),
+  FRR16<f, (outs), (ins  CPU16Opnd:$rx, CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
 }
 
 class FRRTR16_ins<string asmstr> :
-  MipsPseudo16<(outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  MipsPseudo16<(outs CPU16Opnd:$rz), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
                !strconcat(asmstr, "\t$rx, $ry\n\tmove\t$rz, $$t8"), []> ;
 
 //
 // maybe refactor but need a $zero as a dummy first parameter
 //
 class FRR16_div_ins<bits<5> f, string asmstr, InstrItinClass itin> :
-  FRR16<f, (outs ), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  FRR16<f, (outs ), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$$zero, $rx, $ry"), [], itin> ;
 
 class FUnaryRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
-  FRR16<f, (outs CPU16Regs:$rx), (ins CPU16Regs:$ry),
+  FRR16<f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> ;
 
 
 class FRR16_M_ins<bits<5> f, string asmstr,
                   InstrItinClass itin> :
-  FRR16<f, (outs CPU16Regs:$rx), (ins),
+  FRR16<f, (outs CPU16Opnd:$rx), (ins),
         !strconcat(asmstr, "\t$rx"), [], itin>;
 
 class FRxRxRy16_ins<bits<5> f, string asmstr,
                     InstrItinClass itin> :
-  FRR16<f, (outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  FRR16<f, (outs CPU16Opnd:$rz), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
             !strconcat(asmstr, "\t$rz, $ry"),
             [], itin> {
   let Constraints = "$rx = $rz";
@@ -374,13 +403,13 @@ class FRR16_JALRC_RA_only_ins<bits<1> nd_, bits<1> l_,
 
 class FRR16_JALRC_ins<bits<1> nd, bits<1> l, bits<1> ra,
                       string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd, l, ra, (outs), (ins CPU16Regs:$rx),
+  FRR16_JALRC<nd, l, ra, (outs), (ins CPU16Opnd:$rx),
               !strconcat(asmstr, "\t$rx"), [], itin> ;
 
 class FRR_SF16_ins
   <bits<5> _funct, bits<3> _subfunc,
     string asmstr, InstrItinClass itin>:
-  FRR_SF16<_funct, _subfunc, (outs CPU16Regs:$rx), (ins CPU16Regs:$rx_),
+  FRR_SF16<_funct, _subfunc, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_),
            !strconcat(asmstr, "\t $rx"),
            [], itin> {
   let Constraints = "$rx_ = $rx";
@@ -390,7 +419,7 @@ class FRR_SF16_ins
 //
 
 class FRRR16_ins<bits<2> _f, string asmstr,  InstrItinClass itin> :
-  FRRR16<_f, (outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  FRRR16<_f, (outs CPU16Opnd:$rz), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
          !strconcat(asmstr, "\t$rz, $rx, $ry"), [], itin>;
 
 //
@@ -422,8 +451,8 @@ class FRRR16_ins<bits<2> _f, string asmstr,  InstrItinClass itin> :
 // So this pseudo class only has one operand, i.e. op
 //
 class Sel<string op>:
-  MipsPseudo16<(outs CPU16Regs:$rd_), (ins CPU16Regs:$rd, CPU16Regs:$rs,
-               CPU16Regs:$rt),
+  MipsPseudo16<(outs CPU16Opnd:$rd_), (ins CPU16Opnd:$rd, CPU16Opnd:$rs,
+               CPU16Opnd:$rt),
                !strconcat(op, "\t$rt, .+4\n\t\n\tmove $rd, $rs"), []> {
   //let isCodeGenOnly=1;
   let Constraints = "$rd = $rd_";
@@ -446,8 +475,8 @@ class Sel<string op>:
 //
 //
 class SeliT<string op1, string op2>:
-  MipsPseudo16<(outs CPU16Regs:$rd_), (ins CPU16Regs:$rd, CPU16Regs:$rs,
-                                       CPU16Regs:$rl, simm16:$imm),
+  MipsPseudo16<(outs CPU16Opnd:$rd_), (ins CPU16Opnd:$rd, CPU16Opnd:$rs,
+                                       CPU16Opnd:$rl, simm16:$imm),
                !strconcat(op2,
                !strconcat("\t$rl, $imm\n\t",
                !strconcat(op1, "\t.+4\n\tmove $rd, $rs"))), []> {
@@ -469,9 +498,9 @@ class SeliT<string op1, string op2>:
 //
 //
 class SelT<string op1, string op2>:
-  MipsPseudo16<(outs CPU16Regs:$rd_),
-               (ins CPU16Regs:$rd, CPU16Regs:$rs,
-                CPU16Regs:$rl, CPU16Regs:$rr),
+  MipsPseudo16<(outs CPU16Opnd:$rd_),
+               (ins CPU16Opnd:$rd, CPU16Opnd:$rs,
+                CPU16Opnd:$rl, CPU16Opnd:$rr),
                !strconcat(op2,
                !strconcat("\t$rl, $rr\n\t",
                !strconcat(op1, "\t.+4\n\tmove $rd, $rs"))), []> {
@@ -486,7 +515,7 @@ class SelT<string op1, string op2>:
 def Constant32 : MipsPseudo16<(outs), (ins simm32:$imm), "\t.word $imm", []>;
 
 def LwConstant32 :
-  MipsPseudo16<(outs CPU16Regs:$rx), (ins simm32:$imm, simm32:$constid),
+  MipsPseudo16<(outs CPU16Opnd:$rx), (ins simm32:$imm, simm32:$constid),
                "lw\t$rx, 1f\n\tb\t2f\n\t.align\t2\n1: \t.word\t$imm\n2:", []>;
 
 //
@@ -731,6 +760,7 @@ def DivRxRy16: FRR16_div_ins<0b11010, "div", IIM16Alu> {
 def DivuRxRy16: FRR16_div_ins<0b11011, "divu", IIM16Alu> {
   let Defs = [HI0, LO0];
 }
+
 //
 // Format: JAL target MIPS16e
 // Purpose: Jump and Link
@@ -1376,8 +1406,8 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 // Jump and Link (Call)
 let isCall=1, hasDelaySlot=0 in
 def JumpLinkReg16:
-  FRR16_JALRC<0, 0, 0, (outs), (ins CPU16Regs:$rs),
-              "jalrc\t$rs", [(MipsJmpLink CPU16Regs:$rs)], II_JALRC> {
+  FRR16_JALRC<0, 0, 0, (outs), (ins CPU16Opnd:$rs),
+              "jalrc\t$rs", [(MipsJmpLink CPU16Opnd:$rs)], II_JALRC> {
   let Defs = [RA];
 }
 

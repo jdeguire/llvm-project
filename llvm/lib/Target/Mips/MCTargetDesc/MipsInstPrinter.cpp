@@ -191,6 +191,13 @@ printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O) {
 }
 
 void MipsInstPrinter::
+printMips16PCrelPseudoOperand(const MCInst *MI, int opNum, raw_ostream &O) {
+  // This is not a real operand, but rather indicates that the instruction
+  // is PC-relative.
+  O << "$pc";
+}
+
+void MipsInstPrinter::
 printFCCOperand(const MCInst *MI, int opNum, raw_ostream &O) {
   const MCOperand& MO = MI->getOperand(opNum);
   O << MipsFCCToString((Mips::CondCode)MO.getImm());

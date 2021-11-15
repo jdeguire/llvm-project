@@ -206,6 +206,8 @@ class MipsAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseImm(OperandVector &Operands);
   OperandMatchResultTy parseJumpTarget(OperandVector &Operands);
   OperandMatchResultTy parseInvNum(OperandVector &Operands);
+  OperandMatchResultTy parseMips16PseudoReg(OperandVector &Operands, StringRef RegName);
+  OperandMatchResultTy parseMips16PCrelPseudoReg(OperandVector &Operands);
   OperandMatchResultTy parseRegisterList(OperandVector &Operands);
 
   bool searchSymbolAlias(OperandVector &Operands);
@@ -919,6 +921,14 @@ public:
     return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
   }
 
+  /// Coerce the register to GPR32 and return the real register for the current
+  /// target.
+  unsigned getCPU16Reg() const {
+    assert(isRegIdx() && (RegIdx.Kind & RegKind_GPR) && "Invalid access!");
+    unsigned ClassID = Mips::GPR32RegClassID;
+    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
+  }
+
   /// Coerce the register to GPR64 and return the real register for the current
   /// target.
   unsigned getGPR64Reg() const {
@@ -1101,6 +1111,21 @@ public:
                                                unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
     Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
+  }
+
+  void addCPU16AsmRegOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getCPU16Reg()));
+  }
+
+  void addCPU16AsmRegPlusSPOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getCPU16Reg()));
+  }
+
+  void addMips16PCrelPseudoOperandOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(0));    // pseudo register, so doesn't matter
   }
 
   /// Render the operand to an MCInst as a GPR64
@@ -1641,6 +1666,26 @@ public:
       return false;
     return (RegIdx.Index == 21 || RegIdx.Index == 22 ||
       (RegIdx.Index >= 5 && RegIdx.Index <= 7));
+  }
+
+  bool isCPU16AsmReg() const {
+    if (!(isRegIdx() && RegIdx.Kind))
+      return false;
+    return ((RegIdx.Index >= 2 && RegIdx.Index <= 7)
+            || RegIdx.Index == 16 || RegIdx.Index == 17);
+  }
+
+  bool isCPU16AsmRegPlusSP() const {
+    if (!(isRegIdx() && RegIdx.Kind))
+      return false;
+    return ((RegIdx.Index >= 2 && RegIdx.Index <= 7)
+            || RegIdx.Index == 16 || RegIdx.Index == 17 || RegIdx.Index == 29);
+  }
+
+  bool isMips16PseudoReg() const {
+    // The register number is meaningless for pseudo regs. Successfully parsing
+    // the operand is enough to confirm its identity.
+    return isRegIdx() && RegIdx.Kind;
   }
 
   bool isFGRAsmReg() const {
@@ -6783,6 +6828,32 @@ MipsAsmParser::parseInvNum(OperandVector &Operands) {
   Operands.push_back(MipsOperand::CreateImm(
       MCConstantExpr::create(0 - Val, getContext()), S, E, *this));
   return MatchOperand_Success;
+}
+
+OperandMatchResultTy 
+MipsAsmParser::parseMips16PseudoReg(OperandVector &Operands, StringRef RegName) {
+  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
+  MCAsmParser &Parser = getParser();
+  auto Token = Parser.getTok();
+
+  if(Token.is(AsmToken::Dollar)) {
+    StringRef Identifier = getLexer().peekTok(false).getIdentifier();
+    if(RegName == Identifier) {
+      ResTy = MatchOperand_Success;
+      Parser.Lex(); // $
+      Parser.Lex(); // identifier
+      Operands.push_back(MipsOperand::createNumericReg(
+          0, Token.getString(), getContext().getRegisterInfo(), Token.getLoc(),
+          Token.getLoc(), *this));
+    }
+  }
+
+  return ResTy;
+}
+
+OperandMatchResultTy 
+MipsAsmParser::parseMips16PCrelPseudoReg(OperandVector &Operands) {
+  return parseMips16PseudoReg(Operands, "pc");
 }
 
 OperandMatchResultTy

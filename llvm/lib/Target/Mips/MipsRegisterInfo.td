@@ -549,6 +549,17 @@ def GPRMM16AsmOperandMovePPairSecond : MipsAsmRegOperand {
   let PredicateMethod = "isMM16AsmRegMovePPairSecond";
 }
 
+def CPU16AsmOperand : MipsAsmRegOperand {
+  let Name = "CPU16AsmReg";
+  let PredicateMethod = "isCPU16AsmReg";
+}
+
+// TODO: This might go away
+def CPU16AsmOperandPlusSP : MipsAsmRegOperand {
+  let Name = "CPU16AsmRegPlusSP";
+  let PredicateMethod = "isCPU16AsmRegPlusSP";
+}
+
 def ACC64DSPAsmOperand : MipsAsmRegOperand {
   let Name = "ACC64DSPAsmReg";
   let PredicateMethod = "isACCAsmReg";
@@ -641,6 +652,14 @@ def GPRMM16OpndMovePPairFirst : RegisterOperand<GPRMM16MovePPairFirst> {
 
 def GPRMM16OpndMovePPairSecond : RegisterOperand<GPRMM16MovePPairSecond> {
   let ParserMatchClass = GPRMM16AsmOperandMovePPairSecond;
+}
+
+def CPU16Opnd : RegisterOperand<CPU16Regs> {
+  let ParserMatchClass = CPU16AsmOperand;
+}
+
+def CPU16OpndPlusSP : RegisterOperand<CPU16RegsPlusSP> {
+  let ParserMatchClass = CPU16AsmOperandPlusSP;
 }
 
 def GPR64Opnd : RegisterOperand<GPR64> {
