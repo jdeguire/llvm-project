@@ -46,27 +46,42 @@ def mem16_ea : Operand<i32> {
 
 def pcrel16 : Operand<i32>;
 
-// TODO: Use these to make "$pc", "$sp", and "$ra" operands for PC-, SP-, and RA-relative instructions.
-//def MemBarrierOptOperand : AsmOperandClass {
-//  let Name = "MemBarrierOpt";
-//  let ParserMethod = "parseMemBarrierOptOperand";
-//}
-//def memb_opt : Operand<i32> {
-//  let PrintMethod = "printMemBOption";
-//  let ParserMatchClass = MemBarrierOptOperand;
-//  let DecoderMethod = "DecodeMemBarrierOption";
-//}
-// TODO: Define a predicate method that can be used by all three of these.
-def Mips16PCrelPseudoRegOperand : AsmOperandClass {
-  let Name = "Mips16PCrelPseudoReg";
-  let ParserMethod = "parseMips16PCrelPseudoReg";
-  let PredicateMethod = "isMips16PseudoReg";
+// Some MIPS16 instructions, such as "addiu", have operands that look like
+// registers but are not encoded as normal operands. Instead, they determine
+// the opcode to use and so could be considered part of the mnemonic. These
+// define "pseudo register" operands to handle such instructions.
+def Mips16PCPseudoRegOperand : AsmOperandClass {
+  let Name = "Mips16PCPseudoReg";
+  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isMips16PCPseudoReg";
+  let RenderMethod = "addPseudoRegisterOperands";
 }
-def pcrel_pseudo : Operand<i32> {
-  let PrintMethod = "printMips16PCrelPseudoReg";
-  let ParserMatchClass = Mips16PCrelPseudoRegOperand;
+def pcreg_pseudo : Operand<i32> {
+  let PrintMethod = "printMips16PCPseudoReg";
+  let ParserMatchClass = Mips16PCPseudoRegOperand;
 }
 
+def Mips16SPPseudoRegOperand : AsmOperandClass {
+  let Name = "Mips16SPPseudoReg";
+  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isMips16SPPseudoReg";
+  let RenderMethod = "addPseudoRegisterOperands";
+}
+def spreg_pseudo : Operand<i32> {
+  let PrintMethod = "printMips16SPPseudoReg";
+  let ParserMatchClass = Mips16SPPseudoRegOperand;
+}
+
+def Mips16RAPseudoRegOperand : AsmOperandClass {
+  let Name = "Mips16RAPseudoReg";
+  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isMips16RAPseudoReg";
+  let RenderMethod = "addPseudoRegisterOperands";
+}
+def rareg_pseudo : Operand<i32> {
+  let PrintMethod = "printMips16RAPseudoReg";
+  let ParserMatchClass = Mips16RAPseudoRegOperand;
+}
 
 
 //
@@ -232,11 +247,12 @@ class FEXT_RI16R_ins<bits<5> _op, string asmstr,
   FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
 
 class FEXT_RI16_PC_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcrel_pseudo:$pseudo, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcreg_pseudo:$pseudo, simm16:$imm16),
                   !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
-//  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins CPUPCReg:$pr, simm16:$imm16),
-//                  !strconcat(asmstr, "\t$rx, $pr, $imm16"), [], itin>;
-//  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $$pc, $imm16", itin>;
+
+class FEXT_RI16_SP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins spreg_pseudo:$pseudo, simm16:$imm16),
+                  !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
                       InstrItinClass itin>:
@@ -576,6 +592,13 @@ def AddiuRxRyOffMemX16:
 // To add a constant to the program counter.
 //
 def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu>;
+
+// Format: ADDIU rx, sp, immediate MIPS16e
+// Purpose: Add Immediate Unsigned Word (3-Operand, SP-Relative, Extended)
+// To add a constant to the stack pointer.
+//
+def AddiuRxSpImmX16: FEXT_RI16_SP_ins<0b00000, "addiu", IIM16Alu>;
+
 
 //
 // Format: ADDIU sp, immediate MIPS16e

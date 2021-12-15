@@ -191,11 +191,23 @@ printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O) {
 }
 
 void MipsInstPrinter::
-printMips16PCrelPseudoOperand(const MCInst *MI, int opNum, raw_ostream &O) {
-  // This is not a real operand, but rather indicates that the instruction
-  // is PC-relative.
+printMips16PCPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand, but rather indicates a PC-realtive instruction.
   O << "$pc";
 }
+
+void MipsInstPrinter::
+printMips16SPPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand, but rather indicates an SP-realtive instruction.
+  O << "$sp";
+}
+
+void MipsInstPrinter::
+printMips16RAPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand, but rather indicates the instruction accesses RA.
+  O << "$ra";
+}
+
 
 void MipsInstPrinter::
 printFCCOperand(const MCInst *MI, int opNum, raw_ostream &O) {

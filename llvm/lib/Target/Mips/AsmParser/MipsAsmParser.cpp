@@ -206,8 +206,7 @@ class MipsAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseImm(OperandVector &Operands);
   OperandMatchResultTy parseJumpTarget(OperandVector &Operands);
   OperandMatchResultTy parseInvNum(OperandVector &Operands);
-  OperandMatchResultTy parseMips16PseudoReg(OperandVector &Operands, StringRef RegName);
-  OperandMatchResultTy parseMips16PCrelPseudoReg(OperandVector &Operands);
+  OperandMatchResultTy parsePseudoRegister(OperandVector &Operands);
   OperandMatchResultTy parseRegisterList(OperandVector &Operands);
 
   bool searchSymbolAlias(OperandVector &Operands);
@@ -819,6 +818,17 @@ public:
                       RegKind_CCR | RegKind_HWRegs | RegKind_COP3 | RegKind_COP0
   };
 
+  /// Pseudo register values used for some MIPS16 instructions to perform, for
+  /// example, a PC-relative load or store.
+  /// These are not real register operands, but rather change the opcode used.
+  /// In that sense, they could be considered part of the instruction mnemonic.
+  enum PseudoRegister {
+    PseudoReg_Mips16PC,     /// Used for PC-relative instructions
+    PseudoReg_Mips16SP,     /// Used for SP-relative instructions
+    PseudoReg_Mips16RA,     /// Used for instructions that access $ra
+    PseudoReg_Invalid = -1, /// Indicates issue when parsing; not a pseudo reg
+  };
+
 private:
   enum KindTy {
     k_Immediate,     /// An immediate (possibly involving symbol references)
@@ -826,6 +836,7 @@ private:
     k_RegisterIndex, /// A register index in one or more RegKind.
     k_Token,         /// A simple token
     k_RegList,       /// A physical register list
+    k_PseudoReg,     /// A pseudo register for certain MIPS16 instructions
   } Kind;
 
 public:
@@ -843,6 +854,7 @@ public:
     case k_Immediate:
     case k_RegisterIndex:
     case k_Token:
+    case k_PseudoReg:
       break;
     }
   }
@@ -876,12 +888,17 @@ private:
     SmallVector<unsigned, 10> *List;
   };
 
+  struct PseudoRegOp {
+    PseudoRegister Reg;
+  };
+
   union {
     struct Token Tok;
     struct RegIdxOp RegIdx;
     struct ImmOp Imm;
     struct MemOp Mem;
     struct RegListOp RegList;
+    struct PseudoRegOp PseudoReg;
   };
 
   SMLoc StartLoc, EndLoc;
@@ -1123,9 +1140,12 @@ public:
     Inst.addOperand(MCOperand::createReg(getCPU16Reg()));
   }
 
-  void addMips16PCrelPseudoOperandOperands(MCInst &Inst, unsigned N) const {
+  void addPseudoRegisterOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(0));    // pseudo register, so doesn't matter
+    // Pseudo registers are not encoded as normal operands, but rather
+    // determine the instruction's opcode, so the number here does not
+    // matter. Currently, they're used only in MIPS16 instructions.
+    Inst.addOperand(MCOperand::createReg(0));
   }
 
   /// Render the operand to an MCInst as a GPR64
@@ -1465,6 +1485,7 @@ public:
   }
 
   bool isRegList() const { return Kind == k_RegList; }
+  bool isPseudoReg() const { return Kind == k_PseudoReg; }
 
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
@@ -1620,11 +1641,24 @@ public:
     return Op;
   }
 
- bool isGPRZeroAsmReg() const {
+  /// Create a pseudo register, which is used for certain MIPS16 instructions
+  /// to indicate, for example, an SP-relative instruction.
+  /// Pseudo registers affect the opcode used and are not encoded like
+  /// normal operands, so they are in effect part of the mnemonic.
+  static std::unique_ptr<MipsOperand>
+  CreatePseudoRegister(PseudoRegister Reg, SMLoc S, SMLoc E, MipsAsmParser &Parser) {
+    auto Op = std::make_unique<MipsOperand>(k_PseudoReg, Parser);
+    Op->PseudoReg.Reg = Reg;
+    Op->StartLoc = S;
+    Op->EndLoc = E;
+    return Op;
+  }
+
+  bool isGPRZeroAsmReg() const {
     return isRegIdx() && RegIdx.Kind & RegKind_GPR && RegIdx.Index == 0;
   }
 
- bool isGPRNonZeroAsmReg() const {
+  bool isGPRNonZeroAsmReg() const {
    return isRegIdx() && RegIdx.Kind & RegKind_GPR && RegIdx.Index > 0 &&
           RegIdx.Index <= 31;
   }
@@ -1675,6 +1709,7 @@ public:
             || RegIdx.Index == 16 || RegIdx.Index == 17);
   }
 
+#warning TODO: This might go away
   bool isCPU16AsmRegPlusSP() const {
     if (!(isRegIdx() && RegIdx.Kind))
       return false;
@@ -1682,10 +1717,16 @@ public:
             || RegIdx.Index == 16 || RegIdx.Index == 17 || RegIdx.Index == 29);
   }
 
-  bool isMips16PseudoReg() const {
-    // The register number is meaningless for pseudo regs. Successfully parsing
-    // the operand is enough to confirm its identity.
-    return isRegIdx() && RegIdx.Kind;
+  bool isMips16PCPseudoReg() const {
+    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16PC;
+  }
+
+  bool isMips16SPPseudoReg() const {
+    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16SP;
+  }
+
+  bool isMips16RAPseudoReg() const {
+    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16RA;
   }
 
   bool isFGRAsmReg() const {
@@ -1768,6 +1809,9 @@ public:
         OS << Reg << " ";
       OS <<  ">";
       break;
+    case k_PseudoReg:
+      OS << "PseudoReg<" << (int)PseudoReg.Reg << ">";
+      break;
     }
   }
 
@@ -1801,6 +1845,7 @@ static const MCInstrDesc &getInstDesc(unsigned Opcode) {
 }
 
 static bool hasShortDelaySlot(MCInst &Inst) {
+#warning TODO: Do any MIPS16 instructions have a short delay slot?
   switch (Inst.getOpcode()) {
     case Mips::BEQ_MM:
     case Mips::BNE_MM:
@@ -6831,29 +6876,30 @@ MipsAsmParser::parseInvNum(OperandVector &Operands) {
 }
 
 OperandMatchResultTy 
-MipsAsmParser::parseMips16PseudoReg(OperandVector &Operands, StringRef RegName) {
+MipsAsmParser::parsePseudoRegister(OperandVector &Operands) {
   OperandMatchResultTy ResTy = MatchOperand_NoMatch;
   MCAsmParser &Parser = getParser();
   auto Token = Parser.getTok();
 
   if(Token.is(AsmToken::Dollar)) {
     StringRef Identifier = getLexer().peekTok(false).getIdentifier();
-    if(RegName == Identifier) {
+
+    auto Reg = StringSwitch<MipsOperand::PseudoRegister>(Identifier)
+                   .Case("pc", MipsOperand::PseudoReg_Mips16PC)
+                   .Case("sp", MipsOperand::PseudoReg_Mips16SP)
+                   .Case("ra", MipsOperand::PseudoReg_Mips16RA)
+                   .Default(MipsOperand::PseudoReg_Invalid);
+
+    if(Reg != MipsOperand::PseudoReg_Invalid) {
       ResTy = MatchOperand_Success;
       Parser.Lex(); // $
       Parser.Lex(); // identifier
-      Operands.push_back(MipsOperand::createNumericReg(
-          0, Token.getString(), getContext().getRegisterInfo(), Token.getLoc(),
-          Token.getLoc(), *this));
+      Operands.push_back(MipsOperand::CreatePseudoRegister(
+          Reg, Token.getLoc(), Token.getLoc(), *this));
     }
   }
 
   return ResTy;
-}
-
-OperandMatchResultTy 
-MipsAsmParser::parseMips16PCrelPseudoReg(OperandVector &Operands) {
-  return parseMips16PseudoReg(Operands, "pc");
 }
 
 OperandMatchResultTy
