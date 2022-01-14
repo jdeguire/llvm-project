@@ -106,11 +106,13 @@ class FI816_ins_base<bits<3> _func, string asmstr,
 
 class FI816_ins<bits<3> _func, string asmstr,
                 InstrItinClass itin>:
-  FI816_ins_base<_func, asmstr, "\t$imm  # 16 bit inst", itin>;
+  FI816_ins_base<_func, asmstr, "\t$imm # 16 bit inst", itin>;
 
 class FI816_SP_ins<bits<3> _func, string asmstr,
                    InstrItinClass itin>:
-  FI816_ins_base<_func, asmstr, "\t$$sp, $imm # 16 bit inst", itin>;
+  FI816<_func, (outs), (ins spreg_pseudo:$pseudo, simm8_lsl3:$imm8),
+        !strconcat(asmstr, "\t$pseudo, $imm8 # 16 bit inst"), [], itin>;
+//  FI816_ins_base<_func, asmstr, "\t$$sp, $imm # 16 bit inst", itin>;
 
 //
 // RI instruction format
@@ -206,7 +208,9 @@ class FEXT_I816_ins<bits<3> _func, string asmstr,
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
                        InstrItinClass itin>:
-      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16", itin>;
+  FEXT_I816<_func, (outs), (ins spreg_pseudo:$pseudo, simm16:$imm16),
+            !strconcat(asmstr, "\t$pseudo, $imm16"), [], itin>;
+//      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16", itin>;
 
 //
 // Assembler formats in alphabetical order.
