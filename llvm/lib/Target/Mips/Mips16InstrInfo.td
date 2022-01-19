@@ -52,34 +52,37 @@ def pcrel16 : Operand<i32>;
 // define "pseudo register" operands to handle such instructions.
 def Mips16PCPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16PCPseudoReg";
-  let ParserMethod = "parsePseudoRegister";
-  let PredicateMethod = "isMips16PCPseudoReg";
-  let RenderMethod = "addPseudoRegisterOperands";
+//  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isPCPseudoReg";
+//  let RenderMethod = "addPseudoRegisterOperands";
+  let RenderMethod = "addPCPseudoRegOperands";
 }
 def pcreg_pseudo : Operand<i32> {
-  let PrintMethod = "printMips16PCPseudoReg";
+  let PrintMethod = "printPCPseudoReg";
   let ParserMatchClass = Mips16PCPseudoRegOperand;
 }
 
 def Mips16SPPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16SPPseudoReg";
-  let ParserMethod = "parsePseudoRegister";
-  let PredicateMethod = "isMips16SPPseudoReg";
-  let RenderMethod = "addPseudoRegisterOperands";
+//  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isSPPseudoReg";
+//  let RenderMethod = "addPseudoRegisterOperands";
+  let RenderMethod = "addSPPseudoRegOperands";
 }
 def spreg_pseudo : Operand<i32> {
-  let PrintMethod = "printMips16SPPseudoReg";
+  let PrintMethod = "printSPPseudoReg";
   let ParserMatchClass = Mips16SPPseudoRegOperand;
 }
 
 def Mips16RAPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16RAPseudoReg";
-  let ParserMethod = "parsePseudoRegister";
-  let PredicateMethod = "isMips16RAPseudoReg";
-  let RenderMethod = "addPseudoRegisterOperands";
+//  let ParserMethod = "parsePseudoRegister";
+  let PredicateMethod = "isRAPseudoReg";
+//  let RenderMethod = "addPseudoRegisterOperands";
+  let RenderMethod = "addRAPseudoRegOperands";
 }
 def rareg_pseudo : Operand<i32> {
-  let PrintMethod = "printMips16RAPseudoReg";
+  let PrintMethod = "printRAPseudoReg";
   let ParserMatchClass = Mips16RAPseudoRegOperand;
 }
 
@@ -636,7 +639,6 @@ def AdduRxRyRz16: FRRR16_ins<01, "addu", IIM16Alu>, ArithLogic16Defs<1>;
 // To do a bitwise logical AND.
 
 def AndRxRxRy16: FRxRxRy16_ins<0b01100, "and", IIM16Alu>, ArithLogic16Defs<1>;
-
 
 //
 // Format: BEQZ rx, offset MIPS16e

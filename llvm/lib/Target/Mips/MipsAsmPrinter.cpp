@@ -756,20 +756,20 @@ printMemOperandEA(const MachineInstr *MI, int opNum, raw_ostream &O) {
 }
 
 void MipsAsmPrinter::
-printMips16PCPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates a PC-realtive instruction.
+printPCPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates a PC-realtive MIPS16 instruction.
   O << "$pc";
 }
 
 void MipsAsmPrinter::
-printMips16SPPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates an SP-realtive instruction.
+printSPPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates an SP-realtive MIPS16 instruction.
   O << "$sp";
 }
 
 void MipsAsmPrinter::
-printMips16RAPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates the instruction accesses RA.
+printRAPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates the MIPS16 instruction accesses RA.
   O << "$ra";
 }
 

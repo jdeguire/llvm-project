@@ -206,7 +206,6 @@ class MipsAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseImm(OperandVector &Operands);
   OperandMatchResultTy parseJumpTarget(OperandVector &Operands);
   OperandMatchResultTy parseInvNum(OperandVector &Operands);
-  OperandMatchResultTy parsePseudoRegister(OperandVector &Operands);
   OperandMatchResultTy parseRegisterList(OperandVector &Operands);
 
   bool searchSymbolAlias(OperandVector &Operands);
@@ -430,6 +429,8 @@ class MipsAsmParser : public MCTargetAsmParser {
   int matchMSA128RegisterName(StringRef Name);
 
   int matchMSA128CtrlRegisterName(StringRef Name);
+
+  int matchPCRegisterName(StringRef Name);
 
   unsigned getReg(int RC, int RegNo);
 
@@ -812,21 +813,14 @@ public:
     RegKind_HWRegs = 256, /// HWRegs
     RegKind_COP3 = 512,   /// COP3
     RegKind_COP0 = 1024,  /// COP0
+    RegKind_PC = 2048,    /// Program counter (not a real register; used in
+                          /// some MIPS16 instructions).
     /// Potentially any (e.g. $1)
+    // This purposefully does not include RegKind_PC because it is not a real
+    // register and has no number.
     RegKind_Numeric = RegKind_GPR | RegKind_FGR | RegKind_FCC | RegKind_MSA128 |
                       RegKind_MSACtrl | RegKind_COP2 | RegKind_ACC |
                       RegKind_CCR | RegKind_HWRegs | RegKind_COP3 | RegKind_COP0
-  };
-
-  /// Pseudo register values used for some MIPS16 instructions to perform, for
-  /// example, a PC-relative load or store.
-  /// These are not real register operands, but rather change the opcode used.
-  /// In that sense, they could be considered part of the instruction mnemonic.
-  enum PseudoRegister {
-    PseudoReg_Mips16PC,     /// Used for PC-relative instructions
-    PseudoReg_Mips16SP,     /// Used for SP-relative instructions
-    PseudoReg_Mips16RA,     /// Used for instructions that access $ra
-    PseudoReg_Invalid = -1, /// Indicates issue when parsing; not a pseudo reg
   };
 
 private:
@@ -836,7 +830,6 @@ private:
     k_RegisterIndex, /// A register index in one or more RegKind.
     k_Token,         /// A simple token
     k_RegList,       /// A physical register list
-    k_PseudoReg,     /// A pseudo register for certain MIPS16 instructions
   } Kind;
 
 public:
@@ -854,7 +847,6 @@ public:
     case k_Immediate:
     case k_RegisterIndex:
     case k_Token:
-    case k_PseudoReg:
       break;
     }
   }
@@ -888,17 +880,12 @@ private:
     SmallVector<unsigned, 10> *List;
   };
 
-  struct PseudoRegOp {
-    PseudoRegister Reg;
-  };
-
   union {
     struct Token Tok;
     struct RegIdxOp RegIdx;
     struct ImmOp Imm;
     struct MemOp Mem;
     struct RegListOp RegList;
-    struct PseudoRegOp PseudoReg;
   };
 
   SMLoc StartLoc, EndLoc;
@@ -1140,12 +1127,20 @@ public:
     Inst.addOperand(MCOperand::createReg(getCPU16Reg()));
   }
 
-  void addPseudoRegisterOperands(MCInst &Inst, unsigned N) const {
+  void addPCPseudoRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    // Pseudo registers are not encoded as normal operands, but rather
-    // determine the instruction's opcode, so the number here does not
-    // matter. Currently, they're used only in MIPS16 instructions.
+    // This is not a real register and has no number.
     Inst.addOperand(MCOperand::createReg(0));
+  }
+
+  void addSPPseudoRegOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getGPR32Reg()));
+  }
+
+  void addRAPseudoRegOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+    Inst.addOperand(MCOperand::createReg(getGPR32Reg()));
   }
 
   /// Render the operand to an MCInst as a GPR64
@@ -1485,7 +1480,6 @@ public:
   }
 
   bool isRegList() const { return Kind == k_RegList; }
-  bool isPseudoReg() const { return Kind == k_PseudoReg; }
 
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
@@ -1641,17 +1635,10 @@ public:
     return Op;
   }
 
-  /// Create a pseudo register, which is used for certain MIPS16 instructions
-  /// to indicate, for example, an SP-relative instruction.
-  /// Pseudo registers affect the opcode used and are not encoded like
-  /// normal operands, so they are in effect part of the mnemonic.
   static std::unique_ptr<MipsOperand>
-  CreatePseudoRegister(PseudoRegister Reg, SMLoc S, SMLoc E, MipsAsmParser &Parser) {
-    auto Op = std::make_unique<MipsOperand>(k_PseudoReg, Parser);
-    Op->PseudoReg.Reg = Reg;
-    Op->StartLoc = S;
-    Op->EndLoc = E;
-    return Op;
+  createPCReg(const MCRegisterInfo *RegInfo, SMLoc S, SMLoc E,
+              MipsAsmParser &Parser) {
+    return CreateReg(0, "pc", RegKind_PC, RegInfo, S, E, Parser);
   }
 
   bool isGPRZeroAsmReg() const {
@@ -1717,16 +1704,25 @@ public:
             || RegIdx.Index == 16 || RegIdx.Index == 17 || RegIdx.Index == 29);
   }
 
-  bool isMips16PCPseudoReg() const {
-    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16PC;
+  // These next three are used in MIPS16 instructions that perform operations
+  // involving the program counter, SP, or RA. They are "pseudo registers"
+  // because they determine the opcode instead of being encoded as a operand.
+  // In this way, they are part of the instruction mnemonic.
+  bool isPCPseudoReg() const {
+    // "pc" is not a real register and has no number
+    return isRegIdx() && RegIdx.Kind == RegKind_PC;
   }
 
-  bool isMips16SPPseudoReg() const {
-    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16SP;
+  bool isSPPseudoReg() const {
+    // Purposefully do not allow numeric registers; that is, require "$sp"
+    // instead of "$29"
+    return isRegIdx() && RegIdx.Kind == RegKind_GPR && RegIdx.Index == 29;
   }
 
-  bool isMips16RAPseudoReg() const {
-    return isPseudoReg() && PseudoReg.Reg == PseudoReg_Mips16RA;
+  bool isRAPseudoReg() const {
+    // Purposefully do not allow numeric registers; that is, require "$ra"
+    // instead of "$31"
+    return isRegIdx() && RegIdx.Kind == RegKind_GPR && RegIdx.Index == 31;
   }
 
   bool isFGRAsmReg() const {
@@ -1808,9 +1804,6 @@ public:
       for (auto Reg : (*RegList.List))
         OS << Reg << " ";
       OS <<  ">";
-      break;
-    case k_PseudoReg:
-      OS << "PseudoReg<" << (int)PseudoReg.Reg << ">";
       break;
     }
   }
@@ -6401,6 +6394,15 @@ int MipsAsmParser::matchMSA128CtrlRegisterName(StringRef Name) {
   return CC;
 }
 
+int MipsAsmParser::matchPCRegisterName(StringRef Name) {
+  // Used only in MIPS16; check in case someone was using "pc" as a symbol name
+  // in other MIPS modes.
+  if(inMips16Mode() && Name == "pc")
+    return 0;
+
+  return -1;
+}
+
 bool MipsAsmParser::canUseATReg() {
   return AssemblerOptions.back()->getATRegIndex() != 0;
 }
@@ -6760,6 +6762,13 @@ MipsAsmParser::matchAnyRegisterNameWithoutDollar(OperandVector &Operands,
     return MatchOperand_Success;
   }
 
+  Index = matchPCRegisterName(Identifier);
+  if (Index != -1) {
+    Operands.push_back(MipsOperand::createPCReg(
+        getContext().getRegisterInfo(), S, getLexer().getLoc(), *this));
+    return MatchOperand_Success;
+  }
+
   return MatchOperand_NoMatch;
 }
 
@@ -6873,33 +6882,6 @@ MipsAsmParser::parseInvNum(OperandVector &Operands) {
   Operands.push_back(MipsOperand::CreateImm(
       MCConstantExpr::create(0 - Val, getContext()), S, E, *this));
   return MatchOperand_Success;
-}
-
-OperandMatchResultTy 
-MipsAsmParser::parsePseudoRegister(OperandVector &Operands) {
-  OperandMatchResultTy ResTy = MatchOperand_NoMatch;
-  MCAsmParser &Parser = getParser();
-  auto Token = Parser.getTok();
-
-  if(Token.is(AsmToken::Dollar)) {
-    StringRef Identifier = getLexer().peekTok(false).getIdentifier();
-
-    auto Reg = StringSwitch<MipsOperand::PseudoRegister>(Identifier)
-                   .Case("pc", MipsOperand::PseudoReg_Mips16PC)
-                   .Case("sp", MipsOperand::PseudoReg_Mips16SP)
-                   .Case("ra", MipsOperand::PseudoReg_Mips16RA)
-                   .Default(MipsOperand::PseudoReg_Invalid);
-
-    if(Reg != MipsOperand::PseudoReg_Invalid) {
-      ResTy = MatchOperand_Success;
-      Parser.Lex(); // $
-      Parser.Lex(); // identifier
-      Operands.push_back(MipsOperand::CreatePseudoRegister(
-          Reg, Token.getLoc(), Token.getLoc(), *this));
-    }
-  }
-
-  return ResTy;
 }
 
 OperandMatchResultTy

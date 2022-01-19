@@ -191,20 +191,20 @@ printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O) {
 }
 
 void MipsInstPrinter::
-printMips16PCPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates a PC-realtive instruction.
+printPCPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates a PC-realtive MIPS16 instruction.
   O << "$pc";
 }
 
 void MipsInstPrinter::
-printMips16SPPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates an SP-realtive instruction.
+printSPPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates an SP-realtive MIPS16 instruction.
   O << "$sp";
 }
 
 void MipsInstPrinter::
-printMips16RAPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
-  // Not a real operand, but rather indicates the instruction accesses RA.
+printRAPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+  // Not a real operand; instead indicates the MIPS16 instruction accesses RA.
   O << "$ra";
 }
 
