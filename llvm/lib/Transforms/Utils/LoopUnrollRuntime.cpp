@@ -421,16 +421,6 @@ static bool canProfitablyUnrollMultiExitLoop(
   if (UnrollRuntimeMultiExit.getNumOccurrences())
     return UnrollRuntimeMultiExit;
 
-  // TODO: We used to bail out for correctness (now fixed).  Under what
-  // circumstances is this case profitable to allow?
-  if (!LatchExit->getSinglePredecessor())
-    return false;
-
-  // TODO: We used to bail out for correctness (now fixed).  Under what
-  // circumstances is this case profitable to allow?
-  if (UseEpilogRemainder && L->getParentLoop())
-    return false;
-
   // The main pain point with multi-exit loop unrolling is that once unrolled,
   // we will not be able to merge all blocks into a straight line code.
   // There are branches within the unrolled loop that go to the OtherExits.
@@ -633,15 +623,13 @@ bool llvm::UnrollRuntimeLoopRemainder(
   if (!SE)
     return false;
 
-  // Only unroll loops with a computable trip count, and the trip count needs
-  // to be an int value (allowing a pointer type is a TODO item).
+  // Only unroll loops with a computable trip count.
   // We calculate the backedge count by using getExitCount on the Latch block,
   // which is proven to be the only exiting block in this loop. This is same as
   // calculating getBackedgeTakenCount on the loop (which computes SCEV for all
   // exiting blocks).
   const SCEV *BECountSC = SE->getExitCount(L, Latch);
-  if (isa<SCEVCouldNotCompute>(BECountSC) ||
-      !BECountSC->getType()->isIntegerTy()) {
+  if (isa<SCEVCouldNotCompute>(BECountSC)) {
     LLVM_DEBUG(dbgs() << "Could not compute exit block SCEV\n");
     return false;
   }

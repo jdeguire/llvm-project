@@ -31,8 +31,13 @@ static constexpr unsigned kTypePosInBox = 4;
 static constexpr unsigned kAttributePosInBox = 5;
 static constexpr unsigned kF18AddendumPosInBox = 6;
 static constexpr unsigned kDimsPosInBox = 7;
+static constexpr unsigned kStridePosInDim = 2;
 static constexpr unsigned kOptTypePtrPosInBox = 8;
 static constexpr unsigned kOptRowTypePosInBox = 9;
+// Position of the different values in [dims]
+static constexpr unsigned kDimLowerBoundPos = 0;
+static constexpr unsigned kDimExtentPos = 1;
+static constexpr unsigned kDimStridePos = 2;
 
 namespace fir {
 
@@ -54,6 +59,11 @@ public:
       LLVM_DEBUG(llvm::dbgs() << "type convert: " << boxchar << '\n');
       return convertType(specifics->boxcharMemoryType(boxchar.getEleTy()));
     });
+    addConversion([&](BoxProcType boxproc) {
+      // TODO: Support for this type will be added later when the Fortran 2003
+      // procedure pointer feature is implemented.
+      return llvm::None;
+    });
     addConversion(
         [&](fir::CharacterType charTy) { return convertCharType(charTy); });
     addConversion([&](HeapType heap) { return convertPointerLike(heap); });
@@ -70,8 +80,10 @@ public:
     });
     addConversion(
         [&](fir::PointerType pointer) { return convertPointerLike(pointer); });
-    addConversion(
-        [&](fir::RecordType derived) { return convertRecordType(derived); });
+    addConversion([&](fir::RecordType derived, SmallVectorImpl<Type> &results,
+                      ArrayRef<Type> callStack) {
+      return convertRecordType(derived, results, callStack);
+    });
     addConversion([&](fir::FieldType field) {
       // Convert to i32 because of LLVM GEP indexing restriction.
       return mlir::IntegerType::get(field.getContext(), 32);
@@ -89,6 +101,9 @@ public:
         [&](fir::ReferenceType ref) { return convertPointerLike(ref); });
     addConversion([&](fir::SequenceType sequence) {
       return convertSequenceType(sequence);
+    });
+    addConversion([&](fir::TypeDescType tdesc) {
+      return convertTypeDescType(tdesc.getContext());
     });
     addConversion([&](fir::VectorType vecTy) {
       return mlir::VectorType::get(llvm::ArrayRef<int64_t>(vecTy.getLen()),
@@ -114,16 +129,23 @@ public:
   mlir::Type indexType() { return mlir::IntegerType::get(&getContext(), 64); }
 
   // fir.type<name(p : TY'...){f : TY...}>  -->  llvm<"%name = { ty... }">
-  mlir::Type convertRecordType(fir::RecordType derived) {
+  llvm::Optional<LogicalResult>
+  convertRecordType(fir::RecordType derived, SmallVectorImpl<Type> &results,
+                    ArrayRef<Type> callStack) {
     auto name = derived.getName();
     auto st = mlir::LLVM::LLVMStructType::getIdentified(&getContext(), name);
+    if (llvm::count(callStack, derived) > 1) {
+      results.push_back(st);
+      return success();
+    }
     llvm::SmallVector<mlir::Type> members;
     for (auto mem : derived.getTypeList()) {
       members.push_back(convertType(mem.second).cast<mlir::Type>());
     }
-    if (mlir::succeeded(st.setBody(members, /*isPacked=*/false)))
-      return st;
-    return mlir::Type();
+    if (mlir::failed(st.setBody(members, /*isPacked=*/false)))
+      return failure();
+    results.push_back(st);
+    return success();
   }
 
   // Is an extended descriptor needed given the element type of a fir.box type ?
@@ -281,6 +303,14 @@ public:
         return baseTy;
     }
     return mlir::LLVM::LLVMPointerType::get(baseTy);
+  }
+
+  // fir.tdesc<any>  -->  llvm<"i8*">
+  // TODO: For now use a void*, however pointer identity is not sufficient for
+  // the f18 object v. class distinction (F2003).
+  mlir::Type convertTypeDescType(mlir::MLIRContext *ctx) {
+    return mlir::LLVM::LLVMPointerType::get(
+        mlir::IntegerType::get(&getContext(), 8));
   }
 
   /// Convert llvm::Type::TypeID to mlir::Type

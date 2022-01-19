@@ -228,6 +228,7 @@ RegistryMaps::RegistryMaps() {
   REGISTER_MATCHER(eachOf);
   REGISTER_MATCHER(elaboratedType);
   REGISTER_MATCHER(elaboratedTypeLoc);
+  REGISTER_MATCHER(usingType);
   REGISTER_MATCHER(enumConstantDecl);
   REGISTER_MATCHER(enumDecl);
   REGISTER_MATCHER(enumType);
@@ -246,6 +247,7 @@ RegistryMaps::RegistryMaps() {
   REGISTER_MATCHER(forEachArgumentWithParamType);
   REGISTER_MATCHER(forEachConstructorInitializer);
   REGISTER_MATCHER(forEachDescendant);
+  REGISTER_MATCHER(forEachLambdaCapture);
   REGISTER_MATCHER(forEachOverridden);
   REGISTER_MATCHER(forEachSwitchCase);
   REGISTER_MATCHER(forField);
@@ -424,6 +426,7 @@ RegistryMaps::RegistryMaps() {
   REGISTER_MATCHER(isImplicit);
   REGISTER_MATCHER(isInStdNamespace);
   REGISTER_MATCHER(isInTemplateInstantiation);
+  REGISTER_MATCHER(isInitCapture);
   REGISTER_MATCHER(isInline);
   REGISTER_MATCHER(isInstanceMessage);
   REGISTER_MATCHER(isInstanceMethod);

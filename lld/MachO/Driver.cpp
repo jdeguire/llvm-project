@@ -59,8 +59,8 @@ using namespace llvm::sys;
 using namespace lld;
 using namespace lld::macho;
 
-Configuration *macho::config;
-DependencyTracker *macho::depTracker;
+std::unique_ptr<Configuration> macho::config;
+std::unique_ptr<DependencyTracker> macho::depTracker;
 
 static HeaderFileType getOutputType(const InputArgList &args) {
   // TODO: -r, -dylinker, -preload...
@@ -629,11 +629,11 @@ static std::string lowerDash(StringRef s) {
 }
 
 // Has the side-effect of setting Config::platformInfo.
-static PlatformKind parsePlatformVersion(const ArgList &args) {
+static PlatformType parsePlatformVersion(const ArgList &args) {
   const Arg *arg = args.getLastArg(OPT_platform_version);
   if (!arg) {
     error("must specify -platform_version");
-    return PlatformKind::unknown;
+    return PLATFORM_UNKNOWN;
   }
 
   StringRef platformStr = arg->getValue(0);
@@ -641,20 +641,20 @@ static PlatformKind parsePlatformVersion(const ArgList &args) {
   StringRef sdkVersionStr = arg->getValue(2);
 
   // TODO(compnerd) see if we can generate this case list via XMACROS
-  PlatformKind platform =
-      StringSwitch<PlatformKind>(lowerDash(platformStr))
-          .Cases("macos", "1", PlatformKind::macOS)
-          .Cases("ios", "2", PlatformKind::iOS)
-          .Cases("tvos", "3", PlatformKind::tvOS)
-          .Cases("watchos", "4", PlatformKind::watchOS)
-          .Cases("bridgeos", "5", PlatformKind::bridgeOS)
-          .Cases("mac-catalyst", "6", PlatformKind::macCatalyst)
-          .Cases("ios-simulator", "7", PlatformKind::iOSSimulator)
-          .Cases("tvos-simulator", "8", PlatformKind::tvOSSimulator)
-          .Cases("watchos-simulator", "9", PlatformKind::watchOSSimulator)
-          .Cases("driverkit", "10", PlatformKind::driverKit)
-          .Default(PlatformKind::unknown);
-  if (platform == PlatformKind::unknown)
+  PlatformType platform =
+      StringSwitch<PlatformType>(lowerDash(platformStr))
+          .Cases("macos", "1", PLATFORM_MACOS)
+          .Cases("ios", "2", PLATFORM_IOS)
+          .Cases("tvos", "3", PLATFORM_TVOS)
+          .Cases("watchos", "4", PLATFORM_WATCHOS)
+          .Cases("bridgeos", "5", PLATFORM_BRIDGEOS)
+          .Cases("mac-catalyst", "6", PLATFORM_MACCATALYST)
+          .Cases("ios-simulator", "7", PLATFORM_IOSSIMULATOR)
+          .Cases("tvos-simulator", "8", PLATFORM_TVOSSIMULATOR)
+          .Cases("watchos-simulator", "9", PLATFORM_WATCHOSSIMULATOR)
+          .Cases("driverkit", "10", PLATFORM_DRIVERKIT)
+          .Default(PLATFORM_UNKNOWN);
+  if (platform == PLATFORM_UNKNOWN)
     error(Twine("malformed platform: ") + platformStr);
   // TODO: check validity of version strings, which varies by platform
   // NOTE: ld64 accepts version strings with 5 components
@@ -675,7 +675,7 @@ static TargetInfo *createTargetInfo(InputArgList &args) {
     return nullptr;
   }
 
-  PlatformKind platform = parsePlatformVersion(args);
+  PlatformType platform = parsePlatformVersion(args);
   config->platformInfo.target =
       MachO::Target(getArchitectureFromName(archName), platform);
 
@@ -861,27 +861,27 @@ static std::vector<SectionAlign> parseSectAlign(const opt::InputArgList &args) {
   return sectAligns;
 }
 
-PlatformKind macho::removeSimulator(PlatformKind platform) {
+PlatformType macho::removeSimulator(PlatformType platform) {
   switch (platform) {
-  case PlatformKind::iOSSimulator:
-    return PlatformKind::iOS;
-  case PlatformKind::tvOSSimulator:
-    return PlatformKind::tvOS;
-  case PlatformKind::watchOSSimulator:
-    return PlatformKind::watchOS;
+  case PLATFORM_IOSSIMULATOR:
+    return PLATFORM_IOS;
+  case PLATFORM_TVOSSIMULATOR:
+    return PLATFORM_TVOS;
+  case PLATFORM_WATCHOSSIMULATOR:
+    return PLATFORM_WATCHOS;
   default:
     return platform;
   }
 }
 
 static bool dataConstDefault(const InputArgList &args) {
-  static const std::vector<std::pair<PlatformKind, VersionTuple>> minVersion = {
-      {PlatformKind::macOS, VersionTuple(10, 15)},
-      {PlatformKind::iOS, VersionTuple(13, 0)},
-      {PlatformKind::tvOS, VersionTuple(13, 0)},
-      {PlatformKind::watchOS, VersionTuple(6, 0)},
-      {PlatformKind::bridgeOS, VersionTuple(4, 0)}};
-  PlatformKind platform = removeSimulator(config->platformInfo.target.Platform);
+  static const std::vector<std::pair<PlatformType, VersionTuple>> minVersion = {
+      {PLATFORM_MACOS, VersionTuple(10, 15)},
+      {PLATFORM_IOS, VersionTuple(13, 0)},
+      {PLATFORM_TVOS, VersionTuple(13, 0)},
+      {PLATFORM_WATCHOS, VersionTuple(6, 0)},
+      {PLATFORM_BRIDGEOS, VersionTuple(4, 0)}};
+  PlatformType platform = removeSimulator(config->platformInfo.target.Platform);
   auto it = llvm::find_if(minVersion,
                           [&](const auto &p) { return p.first == platform; });
   if (it != minVersion.end())
@@ -1021,26 +1021,30 @@ static void gatherInputSections() {
   TimeTraceScope timeScope("Gathering input sections");
   int inputOrder = 0;
   for (const InputFile *file : inputFiles) {
-    for (const SubsectionMap &map : file->subsections) {
+    for (const Section &section : file->sections) {
+      const Subsections &subsections = section.subsections;
+      if (subsections.empty())
+        continue;
+      if (subsections[0].isec->getName() == section_names::compactUnwind)
+        // Compact unwind entries require special handling elsewhere.
+        continue;
       ConcatOutputSection *osec = nullptr;
-      for (const SubsectionEntry &entry : map) {
-        if (auto *isec = dyn_cast<ConcatInputSection>(entry.isec)) {
+      for (const Subsection &subsection : subsections) {
+        if (auto *isec = dyn_cast<ConcatInputSection>(subsection.isec)) {
           if (isec->isCoalescedWeak())
             continue;
-          if (isec->getSegName() == segment_names::ld) {
-            assert(isec->getName() == section_names::compactUnwind);
-            continue;
-          }
           isec->outSecOff = inputOrder++;
           if (!osec)
             osec = ConcatOutputSection::getOrCreateForInput(isec);
           isec->parent = osec;
           inputSections.push_back(isec);
-        } else if (auto *isec = dyn_cast<CStringInputSection>(entry.isec)) {
+        } else if (auto *isec =
+                       dyn_cast<CStringInputSection>(subsection.isec)) {
           if (in.cStringSection->inputOrder == UnspecifiedInputOrder)
             in.cStringSection->inputOrder = inputOrder++;
           in.cStringSection->addInput(isec);
-        } else if (auto *isec = dyn_cast<WordLiteralInputSection>(entry.isec)) {
+        } else if (auto *isec =
+                       dyn_cast<WordLiteralInputSection>(subsection.isec)) {
           if (in.wordLiteralSection->inputOrder == UnspecifiedInputOrder)
             in.wordLiteralSection->inputOrder = inputOrder++;
           in.wordLiteralSection->addInput(isec);
@@ -1051,6 +1055,25 @@ static void gatherInputSections() {
     }
   }
   assert(inputOrder <= UnspecifiedInputOrder);
+}
+
+static void extractCallGraphProfile() {
+  TimeTraceScope timeScope("Extract call graph profile");
+  for (const InputFile *file : inputFiles) {
+    auto *obj = dyn_cast_or_null<ObjFile>(file);
+    if (!obj)
+      continue;
+    for (const CallGraphEntry &entry : obj->callGraph) {
+      assert(entry.fromIndex < obj->symbols.size() &&
+             entry.toIndex < obj->symbols.size());
+      auto *fromSym = dyn_cast_or_null<Defined>(obj->symbols[entry.fromIndex]);
+      auto *toSym = dyn_cast_or_null<Defined>(obj->symbols[entry.toIndex]);
+
+      if (!fromSym || !toSym)
+        continue;
+      config->callGraphProfile[{fromSym->isec, toSym->isec}] += entry.count;
+    }
+  }
 }
 
 static void foldIdenticalLiterals() {
@@ -1132,11 +1155,11 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     return true;
   }
 
-  config = make<Configuration>();
-  symtab = make<SymbolTable>();
+  config = std::make_unique<Configuration>();
+  symtab = std::make_unique<SymbolTable>();
   target = createTargetInfo(args);
-  depTracker =
-      make<DependencyTracker>(args.getLastArgValue(OPT_dependency_info));
+  depTracker = std::make_unique<DependencyTracker>(
+      args.getLastArgValue(OPT_dependency_info));
   if (errorCount())
     return false;
 
@@ -1258,14 +1281,20 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   config->emitDataInCodeInfo =
       args.hasFlag(OPT_data_in_code_info, OPT_no_data_in_code_info, true);
   config->icfLevel = getICFLevel(args);
-  config->dedupLiterals = args.hasArg(OPT_deduplicate_literals) ||
-                          config->icfLevel != ICFLevel::none;
+  config->dedupLiterals =
+      args.hasFlag(OPT_deduplicate_literals, OPT_icf_eq, false) ||
+      config->icfLevel != ICFLevel::none;
+  config->warnDylibInstallName = args.hasFlag(
+      OPT_warn_dylib_install_name, OPT_no_warn_dylib_install_name, false);
+  config->callGraphProfileSort = args.hasFlag(
+      OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
+  config->printSymbolOrder = args.getLastArgValue(OPT_print_symbol_order);
 
   // FIXME: Add a commandline flag for this too.
   config->zeroModTime = getenv("ZERO_AR_DATE");
 
-  std::array<PlatformKind, 3> encryptablePlatforms{
-      PlatformKind::iOS, PlatformKind::watchOS, PlatformKind::tvOS};
+  std::array<PlatformType, 3> encryptablePlatforms{
+      PLATFORM_IOS, PLATFORM_WATCHOS, PLATFORM_TVOS};
   config->emitEncryptionInfo =
       args.hasFlag(OPT_encryptable, OPT_no_encryption,
                    is_contained(encryptablePlatforms, config->platform()));
@@ -1276,8 +1305,10 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 #endif
 
   if (const Arg *arg = args.getLastArg(OPT_install_name)) {
-    if (config->outputType != MH_DYLIB)
-      warn(arg->getAsString(args) + ": ignored, only has effect with -dylib");
+    if (config->warnDylibInstallName && config->outputType != MH_DYLIB)
+      warn(
+          arg->getAsString(args) +
+          ": ignored, only has effect with -dylib [--warn-dylib-install-name]");
     else
       config->installName = arg->getValue();
   } else if (config->outputType == MH_DYLIB) {
@@ -1378,7 +1409,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   config->adhocCodesign = args.hasFlag(
       OPT_adhoc_codesign, OPT_no_adhoc_codesign,
       (config->arch() == AK_arm64 || config->arch() == AK_arm64e) &&
-          config->platform() == PlatformKind::macOS);
+          config->platform() == PLATFORM_MACOS);
 
   if (args.hasArg(OPT_v)) {
     message(getLLDVersion(), lld::errs());
@@ -1450,8 +1481,10 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     replaceCommonSymbols();
 
     StringRef orderFile = args.getLastArgValue(OPT_order_file);
-    if (!orderFile.empty())
+    if (!orderFile.empty()) {
       parseOrderFile(orderFile);
+      config->callGraphProfileSort = false;
+    }
 
     referenceStubBinder();
 
@@ -1501,6 +1534,8 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     }
 
     gatherInputSections();
+    if (config->callGraphProfileSort)
+      extractCallGraphProfile();
 
     if (config->deadStrip)
       markLive();

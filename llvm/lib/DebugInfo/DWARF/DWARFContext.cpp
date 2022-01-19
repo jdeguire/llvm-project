@@ -693,25 +693,32 @@ void DWARFContext::dump(
     getDebugNames().dump(OS);
 }
 
-DWARFTypeUnit *DWARFContext::getTypeUnitForHash(uint16_t Version,
-                                                uint64_t Hash) {
-  // FIXME: Include support for Split DWARF here
-  parseNormalUnits();
+DWARFTypeUnit *DWARFContext::getTypeUnitForHash(uint16_t Version, uint64_t Hash,
+                                                bool IsDWO) {
+  parseDWOUnits(LazyParse);
 
-  auto IsTypeWithHash = [&](const std::unique_ptr<DWARFUnit> &Unit) {
-    DWARFTypeUnit *TU = dyn_cast<DWARFTypeUnit>(Unit.get());
-    if (!TU)
-      return false;
-    return TU->getTypeHash() == Hash;
+  if (const auto &TUI = getTUIndex()) {
+    if (const auto *R = TUI.getFromHash(Hash))
+      return dyn_cast_or_null<DWARFTypeUnit>(
+          DWOUnits.getUnitForIndexEntry(*R));
+    return nullptr;
+  }
+
+  struct UnitContainers {
+    const DWARFUnitVector &Units;
+    Optional<DenseMap<uint64_t, DWARFTypeUnit *>> &Map;
   };
-  auto I = llvm::find_if(types_section_units(), IsTypeWithHash);
-  if (I != types_section_units().end())
-    return cast<DWARFTypeUnit>(I->get());
-  // Search normal .debug_info units in case it's a DWARFv5 type unit.
-  I = llvm::find_if(normal_units(), IsTypeWithHash);
-  if (I != types_section_units().end())
-    return cast<DWARFTypeUnit>(I->get());
-  return nullptr;
+  UnitContainers Units = IsDWO ? UnitContainers{DWOUnits, DWOTypeUnits}
+                               : UnitContainers{NormalUnits, NormalTypeUnits};
+  if (!Units.Map) {
+    Units.Map.emplace();
+    for (const auto &U : IsDWO ? dwo_units() : normal_units()) {
+      if (DWARFTypeUnit *TU = dyn_cast<DWARFTypeUnit>(U.get()))
+        (*Units.Map)[TU->getTypeHash()] = TU;
+    }
+  }
+
+  return (*Units.Map)[Hash];
 }
 
 DWARFCompileUnit *DWARFContext::getDWOCompileUnitForHash(uint64_t Hash) {
@@ -1107,6 +1114,7 @@ static Optional<uint64_t> getTypeSize(DWARFDie Type, uint64_t PointerSize) {
     return PointerSize;
   }
   case DW_TAG_const_type:
+  case DW_TAG_immutable_type:
   case DW_TAG_volatile_type:
   case DW_TAG_restrict_type:
   case DW_TAG_typedef: {
@@ -1204,7 +1212,7 @@ void DWARFContext::addLocalsForDie(DWARFCompileUnit *CU, DWARFDie Subprogram,
             Die.getAttributeValueAsReferencedDie(DW_AT_abstract_origin))
       Die = Origin;
     if (auto NameAttr = Die.find(DW_AT_name))
-      if (Optional<const char *> Name = NameAttr->getAsCString())
+      if (Optional<const char *> Name = dwarf::toString(*NameAttr))
         Local.Name = *Name;
     if (auto Type = Die.getAttributeValueAsReferencedDie(DW_AT_type))
       Local.Size = getTypeSize(Type, getCUAddrSize());

@@ -223,9 +223,7 @@ static SanitizerMask parseSanitizeTrapArgs(const Driver &D,
   SanitizerMask TrappingKinds;
   SanitizerMask TrappingSupportedWithGroups = setGroupBits(TrappingSupported);
 
-  for (ArgList::const_reverse_iterator I = Args.rbegin(), E = Args.rend();
-       I != E; ++I) {
-    const auto *Arg = *I;
+  for (const llvm::opt::Arg *Arg : llvm::reverse(Args)) {
     if (Arg->getOption().matches(options::OPT_fsanitize_trap_EQ)) {
       Arg->claim();
       SanitizerMask Add = parseArgValues(D, Arg, true);
@@ -322,9 +320,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
   bool RemoveObjectSizeAtO0 =
       !OptLevel || OptLevel->getOption().matches(options::OPT_O0);
 
-  for (ArgList::const_reverse_iterator I = Args.rbegin(), E = Args.rend();
-       I != E; ++I) {
-    const auto *Arg = *I;
+  for (const llvm::opt::Arg *Arg : llvm::reverse(Args)) {
     if (Arg->getOption().matches(options::OPT_fsanitize_EQ)) {
       Arg->claim();
       SanitizerMask Add = parseArgValues(D, Arg, DiagnoseErrors);
@@ -349,7 +345,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
       if (SanitizerMask KindsToDiagnose =
               Add & InvalidTrappingKinds & ~DiagnosedKinds) {
         if (DiagnoseErrors) {
-          std::string Desc = describeSanitizeArg(*I, KindsToDiagnose);
+          std::string Desc = describeSanitizeArg(Arg, KindsToDiagnose);
           D.Diag(diag::err_drv_argument_not_allowed_with)
               << Desc << "-fsanitize-trap=undefined";
         }
@@ -361,7 +357,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
         if (SanitizerMask KindsToDiagnose =
                 Add & NotAllowedWithMinimalRuntime & ~DiagnosedKinds) {
           if (DiagnoseErrors) {
-            std::string Desc = describeSanitizeArg(*I, KindsToDiagnose);
+            std::string Desc = describeSanitizeArg(Arg, KindsToDiagnose);
             D.Diag(diag::err_drv_argument_not_allowed_with)
                 << Desc << "-fsanitize-minimal-runtime";
           }
@@ -391,7 +387,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
 
       if (SanitizerMask KindsToDiagnose = Add & ~Supported & ~DiagnosedKinds) {
         if (DiagnoseErrors) {
-          std::string Desc = describeSanitizeArg(*I, KindsToDiagnose);
+          std::string Desc = describeSanitizeArg(Arg, KindsToDiagnose);
           D.Diag(diag::err_drv_unsupported_opt_for_target)
               << Desc << TC.getTriple().str();
         }
@@ -645,10 +641,14 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
         Args.hasFlag(options::OPT_fsanitize_memory_use_after_dtor,
                      options::OPT_fno_sanitize_memory_use_after_dtor,
                      MsanUseAfterDtor);
+    MsanParamRetval = Args.hasFlag(
+        options::OPT_fsanitize_memory_param_retval,
+        options::OPT_fno_sanitize_memory_param_retval, MsanParamRetval);
     NeedPIE |= !(TC.getTriple().isOSLinux() &&
                  TC.getTriple().getArch() == llvm::Triple::x86_64);
   } else {
     MsanUseAfterDtor = false;
+    MsanParamRetval = false;
   }
 
   if (AllAddedKinds & SanitizerKind::Thread) {
@@ -1099,6 +1099,9 @@ void SanitizerArgs::addArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
 
   if (MsanUseAfterDtor)
     CmdArgs.push_back("-fsanitize-memory-use-after-dtor");
+
+  if (MsanParamRetval)
+    CmdArgs.push_back("-fsanitize-memory-param-retval");
 
   // FIXME: Pass these parameters as function attributes, not as -llvm flags.
   if (!TsanMemoryAccess) {

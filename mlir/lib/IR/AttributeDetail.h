@@ -16,7 +16,6 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Identifier.h"
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Support/StorageUniquer.h"
@@ -301,7 +300,7 @@ struct DenseStringElementsAttrStorage : public DenseElementsAttributeStorage {
     // contents.
     auto mutableCopy = MutableArrayRef<StringRef>(
         reinterpret_cast<StringRef *>(rawData), numEntries);
-    auto stringData = rawData + numEntries * sizeof(StringRef);
+    auto *stringData = rawData + numEntries * sizeof(StringRef);
 
     for (int i = 0; i < numEntries; i++) {
       memcpy(stringData, data[i].data(), data[i].size());

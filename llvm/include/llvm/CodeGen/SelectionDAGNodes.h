@@ -58,7 +58,6 @@ namespace llvm {
 
 class APInt;
 class Constant;
-template <typename T> struct DenseMapInfo;
 class GlobalValue;
 class MachineBasicBlock;
 class MachineConstantPoolValue;
@@ -675,6 +674,9 @@ public:
         return true;
     }
   }
+
+  /// Test if this node is a vector predication operation.
+  bool isVPOpcode() const { return ISD::isVPOpcode(getOpcode()); }
 
   /// Test if this node has a post-isel opcode, directly
   /// corresponding to a MachineInstr opcode.
