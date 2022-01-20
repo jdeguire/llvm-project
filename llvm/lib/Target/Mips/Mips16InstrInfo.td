@@ -378,10 +378,9 @@ class FRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
 }
 
-class FRRBreakNull16_ins<string asmstr, InstrItinClass itin> :
-  FRRBreak16<(outs), (ins), asmstr, [], itin> {
-  let Code=0;
-}
+class FRRBreak16_ins<string asmstr, InstrItinClass itin> :
+  FRRBreak16<(outs), (ins uimm6:$Code), !strconcat(asmstr, "\t$Code"),
+              [], itin>;
 
 class FRR16R_ins<bits<5> f, string asmstr, InstrItinClass itin> :
   FRR16<f, (outs), (ins  CPU16Opnd:$rx, CPU16Opnd:$ry),
@@ -715,7 +714,8 @@ def BnezRxImmX16: FEXT_RI16_B_ins<0b00101, "bnez", IIM16Alu>, cbranch16;
 // Purpose: Breakpoint
 // To cause a Breakpoint exception.
 
-def Break16: FRRBreakNull16_ins<"break 0", IIM16Alu>;
+def Break16: FRRBreak16_ins<"break", IIM16Alu>;
+
 //
 // Format: BTEQZ offset MIPS16e
 // Purpose: Branch on T Equal to Zero (Extended)
@@ -1960,7 +1960,7 @@ def : Mips16Pat<(i32 (extloadi8   addr16:$src)),
 def : Mips16Pat<(i32 (extloadi16  addr16:$src)),
                 (LhuRxRyOffMemX16  addr16:$src)>;
 
-def: Mips16Pat<(trap), (Break16)>;
+def: Mips16Pat<(trap), (Break16 0)>;
 
 def : Mips16Pat<(sext_inreg CPU16Regs:$val, i8),
                 (SebRx16 CPU16Regs:$val)>;
@@ -1991,5 +1991,7 @@ MipsPseudo16<(outs), (ins cpinst_operand:$instid, cpinst_operand:$cpidx,
 
 // Instruction Aliases
 
-let EncodingPredicates = [InMips16Mode] in
-def : MipsInstAlias<"nop", (Move32R16 ZERO, S0)>;
+let EncodingPredicates = [InMips16Mode] in {
+  def : MipsInstAlias<"break", (Break16 0)>;
+  def : MipsInstAlias<"nop", (Move32R16 ZERO, S0)>;
+}
