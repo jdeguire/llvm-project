@@ -640,6 +640,32 @@ def AdduRxRyRz16: FRRR16_ins<01, "addu", IIM16Alu>, ArithLogic16Defs<1>;
 
 def AndRxRxRy16: FRxRxRy16_ins<0b01100, "and", IIM16Alu>, ArithLogic16Defs<1>;
 
+
+//
+// Format: ASMACRO select, p0, p1, p2, p3, p4
+// Purpose: Application-Specific Macro Instruction
+// To execute an implementation-definable macro instruction
+//
+def Asmacro16: FASMACRO16<(outs), 
+                          (ins uimm3:$select, uimm5:$p0_, uimm3:$p1_, uimm3:$p2_,
+                           uimm5:$p3_, uimm3:$p4_),
+                           "asmacro\t$select, $p0_, $p1_, $p2_, $p3_, $p4_", 
+                           [], IIM16Alu> {
+  // Do this because using eg. "p0" directly makes LLVM think the operand is an
+  // Octeon register called "P0".
+  bits<5> p0_;
+  bits<3> p1_;
+  bits<3> p2_;
+  bits<5> p3_;
+  bits<3> p4_;
+
+  let p0 = p0_;
+  let p1 = p1_;
+  let p2 = p2_;
+  let p3 = p3_;
+  let p4 = p4_;
+}
+
 //
 // Format: BEQZ rx, offset MIPS16e
 // Purpose: Branch on Equal to Zero
