@@ -156,6 +156,7 @@ class FRI16_B_ins<bits<5> _op, string asmstr,
                   InstrItinClass itin>:
   FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget:$imm),
         !strconcat(asmstr, "\t$rx, $imm  # 16 bit inst"), [], itin>;
+
 //
 // Compare a register and immediate and place result in CC
 // Implicit use of T8
@@ -200,14 +201,18 @@ class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
 // EXT-I8 instruction format
 //
 
-class FEXT_I816_ins_base<bits<3> _func, string asmstr,
-                         string asmstr2, InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins simm16:$imm16), !strconcat(asmstr, asmstr2),
-            [], itin>;
+//class FEXT_I816_ins_base<bits<3> _func, string asmstr,
+//                         string asmstr2, InstrItinClass itin>:
+//  FEXT_I816<_func, (outs), (ins simm16:$imm16), !strconcat(asmstr, asmstr2),
+//            [], itin>;
 
-class FEXT_I816_ins<bits<3> _func, string asmstr,
-                    InstrItinClass itin>:
-  FEXT_I816_ins_base<_func, asmstr, "\t$imm16", itin>;
+//class FEXT_I816_ins<bits<3> _func, string asmstr,
+//                    InstrItinClass itin>:
+//  FEXT_I816_ins_base<_func, asmstr, "\t$imm16", itin>;
+
+class FEXT_I816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
+  FEXT_I816<_func, (outs), (ins brtarget:$imm16),
+            !strconcat(asmstr, "\t$imm16"), [], itin>;
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
                        InstrItinClass itin>:
@@ -725,7 +730,7 @@ def Bteqz16: FI816_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
   let Uses = [T8];
 }
 
-def BteqzX16: FEXT_I816_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
+def BteqzX16: FEXT_I816_B_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
   let Uses = [T8];
 }
 
@@ -753,7 +758,7 @@ def Btnez16: FI816_ins<0b001, "btnez", IIM16Alu>, cbranch16 {
   let Uses = [T8];
 }
 
-def BtnezX16: FEXT_I816_ins<0b001, "btnez", IIM16Alu> ,cbranch16 {
+def BtnezX16: FEXT_I816_B_ins<0b001, "btnez", IIM16Alu> ,cbranch16 {
   let Uses = [T8];
 }
 

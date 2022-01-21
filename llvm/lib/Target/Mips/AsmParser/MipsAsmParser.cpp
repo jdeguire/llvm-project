@@ -6119,6 +6119,12 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm8_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 8-bit unsigned immediate");
+//  case Match_SImm8_Lsl1:
+//    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
+//                 "expected both 9-bit signed immediate and multiple of 2");
+  case Match_SImm8_Lsl3:
+    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
+                 "expected both 11-bit signed immediate and multiple of 8");
   case Match_UImm10_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 10-bit unsigned immediate");
