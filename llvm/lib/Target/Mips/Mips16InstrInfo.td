@@ -1999,4 +1999,8 @@ MipsPseudo16<(outs), (ins cpinst_operand:$instid, cpinst_operand:$cpidx,
 let EncodingPredicates = [InMips16Mode] in {
   def : MipsInstAlias<"break", (Break16 0)>;
   def : MipsInstAlias<"nop", (Move32R16 ZERO, S0)>;
+  def : MipsInstAlias<"div $rs, $rt",
+                      (DivRxRy16 CPU16Opnd:$rs, CPU16Opnd:$rt)>;
+  def : MipsInstAlias<"divu $rs, $rt",
+                      (DivuRxRy16 CPU16Opnd:$rs, CPU16Opnd:$rt)>;
 }
