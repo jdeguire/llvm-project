@@ -402,7 +402,7 @@ class FI8_SVRS16<bits<1> _s, dag outs, dag ins, string asmstr,
 
 //===----------------------------------------------------------------------===//
 // Format JAL instruction class in Mips16 :
-//    <|opcode|svrs|s|ra|s0|s1|framesize>
+//    <|opcode|X|target20:16|target25:21|target15:10>
 //===----------------------------------------------------------------------===//
 
 class FJAL16<bits<1> _X, dag outs, dag ins, string asmstr,
@@ -455,21 +455,21 @@ class FASMACRO16<dag outs, dag ins, string asmstr,
   MipsInst16_EXTEND<outs, ins, asmstr, pattern, itin>
 {
   bits<3> select;
-  bits<3> p4;
-  bits<5> p3;
+  bits<3> _p4;
+  bits<5> _p3;
   bits<5> RRR = 0b11100;
-  bits<3> p2;
-  bits<3> p1;
-  bits<5> p0;
+  bits<3> _p2;     // p0-p2 are Octeon registers
+  bits<3> _p1;
+  bits<5> _p0;
 
 
   let Inst{26-24} = select;
-  let Inst{23-21} = p4;
-  let Inst{20-16} = p3;
+  let Inst{23-21} = _p4;
+  let Inst{20-16} = _p3;
   let Inst{15-11} = RRR;
-  let Inst{10-8} = p2;
-  let Inst{7-5} = p1;
-  let Inst{4-0} = p0;
+  let Inst{10-8} = _p2;
+  let Inst{7-5} = _p1;
+  let Inst{4-0} = _p0;
 
 }
 

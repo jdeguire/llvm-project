@@ -6152,6 +6152,9 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm26_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 26-bit unsigned immediate");
+  case Match_UImm26_Lsl2:
+    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
+                 "expected both 28-bit signed immediate and multiple of 4");
   case Match_SImm32:
   case Match_SImm32_Relaxed:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),

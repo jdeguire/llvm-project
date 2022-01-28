@@ -57,7 +57,7 @@ def Mips16PCPseudoRegOperand : AsmOperandClass {
 //  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addPCPseudoRegOperands";
 }
-def pcreg_pseudo : Operand<i32> {
+def PCPseudoReg : Operand<i32> {
   let PrintMethod = "printPCPseudoReg";
   let ParserMatchClass = Mips16PCPseudoRegOperand;
 }
@@ -69,7 +69,7 @@ def Mips16SPPseudoRegOperand : AsmOperandClass {
 //  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addSPPseudoRegOperands";
 }
-def spreg_pseudo : Operand<i32> {
+def SPPseudoReg : Operand<i32> {
   let PrintMethod = "printSPPseudoReg";
   let ParserMatchClass = Mips16SPPseudoRegOperand;
 }
@@ -81,7 +81,7 @@ def Mips16RAPseudoRegOperand : AsmOperandClass {
 //  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addRAPseudoRegOperands";
 }
-def rareg_pseudo : Operand<i32> {
+def RAPseudoReg : Operand<i32> {
   let PrintMethod = "printRAPseudoReg";
   let ParserMatchClass = Mips16RAPseudoRegOperand;
 }
@@ -113,7 +113,7 @@ class FI816_ins<bits<3> _func, string asmstr,
 
 class FI816_SP_ins<bits<3> _func, string asmstr,
                    InstrItinClass itin>:
-  FI816<_func, (outs), (ins spreg_pseudo:$pseudo, simm8_lsl3:$imm8),
+  FI816<_func, (outs), (ins SPPseudoReg:$pseudo, simm8_lsl3:$imm8),
         !strconcat(asmstr, "\t$pseudo, $imm8 # 16 bit inst"), [], itin>;
 //  FI816_ins_base<_func, asmstr, "\t$$sp, $imm # 16 bit inst", itin>;
 
@@ -172,7 +172,7 @@ class FEXT_CCRXI16_ins<string asmstr>:
 
 // JAL and JALX instruction format
 //
-class FJAL16_ins<bits<1> _X, string asmstr,
+class FJAL16_codegen_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
   FJAL16<_X, (outs), (ins uimm26:$imm),
          !strconcat(asmstr, "\t$imm\n\tnop"),[],
@@ -181,7 +181,7 @@ class FJAL16_ins<bits<1> _X, string asmstr,
   let Size=6;
 }
 
-class FJALB16_ins<bits<1> _X, string asmstr,
+class FJALB16_codegen_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
   FJAL16<_X, (outs), (ins uimm26:$imm),
          !strconcat(asmstr, "\t$imm\t# branch\n\tnop"),[],
@@ -189,6 +189,11 @@ class FJALB16_ins<bits<1> _X, string asmstr,
   let isCodeGenOnly=1;
   let Size=6;
 }
+
+class FJAL16_ins<bits<1> _X, string asmstr,
+                 InstrItinClass itin>:
+  FJAL16<_X, (outs), (ins uimm26_lsl2:$imm26),
+         !strconcat(asmstr, "\t$imm26"),[], itin>;
 
 //
 // EXT-I instruction format
@@ -216,7 +221,7 @@ class FEXT_I816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
                        InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins spreg_pseudo:$pseudo, simm16:$imm16),
+  FEXT_I816<_func, (outs), (ins SPPseudoReg:$pseudo, simm16:$imm16),
             !strconcat(asmstr, "\t$pseudo, $imm16"), [], itin>;
 //      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16", itin>;
 
@@ -259,11 +264,11 @@ class FEXT_RI16R_ins<bits<5> _op, string asmstr,
   FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
 
 class FEXT_RI16_PC_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcreg_pseudo:$pseudo, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, simm16:$imm16),
                   !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
 
 class FEXT_RI16_SP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins spreg_pseudo:$pseudo, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins SPPseudoReg:$pseudo, simm16:$imm16),
                   !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
@@ -375,6 +380,13 @@ class FMULT16_LO_ins<string asmstr> :
 }
 
 //
+// Used for breakpoint instructions (break and sdbbp)
+//
+class FC16_ins<bits<5> _funct, string asmstr, InstrItinClass itin> :
+  FC16<_funct, (outs), (ins uimm6:$_code), !strconcat(asmstr, "\t$_code"),
+              [], itin>;
+
+//
 // RR-type instruction format
 //
 
@@ -382,10 +394,6 @@ class FRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
   FRR16<f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
 }
-
-class FRRBreak16_ins<string asmstr, InstrItinClass itin> :
-  FRRBreak16<(outs), (ins uimm6:$Code), !strconcat(asmstr, "\t$Code"),
-              [], itin>;
 
 class FRR16R_ins<bits<5> f, string asmstr, InstrItinClass itin> :
   FRR16<f, (outs), (ins  CPU16Opnd:$rx, CPU16Opnd:$ry),
@@ -421,16 +429,18 @@ class FRxRxRy16_ins<bits<5> f, string asmstr,
   let Constraints = "$rx = $rz";
 }
 
+class FRR16_JALRC_RaRx_ins<bits<1> nd_, string asmstr, InstrItinClass itin>:
+  FRR16_JALRC<nd_, 1, 0, (outs), (ins RAPseudoReg:$pseudo, CPU16Opnd:$rx),
+              !strconcat(asmstr, "\t$pseudo, $rx"), [], itin> ;
+
 let rx=0 in
-class FRR16_JALRC_RA_only_ins<bits<1> nd_, bits<1> l_,
-                              string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd_, l_, 1, (outs), (ins), !strconcat(asmstr, "\t$$ra"),
-              [], itin> ;
+class FRR16_JALRC_RA_only_ins<bits<1> nd_, string asmstr, InstrItinClass itin>:
+  FRR16_JALRC<nd_, 0, 1, (outs), (ins RAPseudoReg:$pseudo),
+              !strconcat(asmstr, "\t$pseudo"), [], itin> ;
 
-
-class FRR16_JALRC_ins<bits<1> nd, bits<1> l, bits<1> ra,
-                      string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd, l, ra, (outs), (ins CPU16Opnd:$rx),
+class FRR16_JALRC_RX_only_ins<bits<1> nd_, string asmstr,
+                      InstrItinClass itin>:
+  FRR16_JALRC<nd_, 0, 0, (outs), (ins CPU16Opnd:$rx), 
               !strconcat(asmstr, "\t$rx"), [], itin> ;
 
 class FRR_SF16_ins
@@ -651,24 +661,10 @@ def AndRxRxRy16: FRxRxRy16_ins<0b01100, "and", IIM16Alu>, ArithLogic16Defs<1>;
 // To execute an implementation-definable macro instruction
 //
 def Asmacro16: FASMACRO16<(outs), 
-                          (ins uimm3:$select, uimm5:$p0_, uimm3:$p1_, uimm3:$p2_,
-                           uimm5:$p3_, uimm3:$p4_),
-                           "asmacro\t$select, $p0_, $p1_, $p2_, $p3_, $p4_", 
-                           [], IIM16Alu> {
-  // Do this because using eg. "p0" directly makes LLVM think the operand is an
-  // Octeon register called "P0".
-  bits<5> p0_;
-  bits<3> p1_;
-  bits<3> p2_;
-  bits<5> p3_;
-  bits<3> p4_;
-
-  let p0 = p0_;
-  let p1 = p1_;
-  let p2 = p2_;
-  let p3 = p3_;
-  let p4 = p4_;
-}
+                          (ins uimm3:$select, uimm5:$_p0, uimm3:$_p1, uimm3:$_p2,
+                           uimm5:$_p3, uimm3:$_p4),
+                           "asmacro\t$select, $_p0, $_p1, $_p2, $_p3, $_p4", 
+                           [], IIM16Alu>;
 
 //
 // Format: BEQZ rx, offset MIPS16e
@@ -719,7 +715,7 @@ def BnezRxImmX16: FEXT_RI16_B_ins<0b00101, "bnez", IIM16Alu>, cbranch16;
 // Purpose: Breakpoint
 // To cause a Breakpoint exception.
 
-def Break16: FRRBreak16_ins<"break", IIM16Alu>;
+def Break16: FC16_ins<0b00101, "break", IIM16Alu>;
 
 //
 // Format: BTEQZ offset MIPS16e
@@ -828,48 +824,107 @@ def DivuRxRy16: FRR16_div_ins<0b11011, "divu", IIM16Alu> {
 // region and preserve the current ISA.
 //
 
-def Jal16 : FJAL16_ins<0b0, "jal", IIM16Alu> {
+def Jal16 : FJAL16_codegen_ins<0, "jal", IIM16Alu> {
   let hasDelaySlot = 0;  // not true, but we add the nop for now
-  let isCall=1;
+  let isCall = 1;
   let Defs = [RA];
 }
 
-def JalB16 : FJALB16_ins<0b0, "jal", IIM16Alu>, branch16 {
+def JalB16 : FJALB16_codegen_ins<0, "jal", IIM16Alu>, branch16 {
   let hasDelaySlot = 0;  // not true, but we add the nop for now
   let isBranch=1;
   let Defs = [RA];
 }
 
+def Jal16imm : FJAL16_ins<0, "jal", IIM16Alu> {
+  let hasDelaySlot = 1;
+  let isCall = 1;
+  let Defs = [RA];
+}
+
 //
-// Format: JR ra MIPS16e
+// Format: JALX target MIPS16e
+// Purpose: Jump and Link Exchange
+// To execute a procedure call within the current 256 MB-aligned
+// region and change the ISA Mode from MIPS16e to 32-bit MIPS.
+//
+def Jalx16 : FJAL16_ins<1, "jalx", IIM16Alu> {
+  let hasDelaySlot = 1;
+  let isCall = 1;
+  let Defs = [RA];
+}
+
+
+//
+// Format: JALR(C) ra, rx MIPS16e
+// Purpose: Jump and Link Register
+// To execute a procedure call to an instruction address in
+// a register.
+//
+def JalrRaRx16: FRR16_JALRC_RaRx_ins<0, "jalr", IIM16Alu> {
+  let isBranch = 1;
+  let isIndirectBranch = 1;
+  let hasDelaySlot = 1;
+  let isCall = 1;
+  let isTerminator = 1;
+  let isBarrier = 1;
+  let Defs = [RA];
+}
+
+def JalrcRaRx16: FRR16_JALRC_RaRx_ins<1, "jalrc", IIM16Alu> {
+  let isBranch = 1;
+  let isIndirectBranch = 1;
+  let hasDelaySlot = 0;
+  let isCall = 1;
+  let isTerminator = 1;
+  let isBarrier = 1;
+  let Defs = [RA];
+}
+
+//
+// Format: JR(C) ra MIPS16e
 // Purpose: Jump Register Through Register ra
 // To execute a branch to the instruction address in the return
 // address register.
 //
-
-def JrRa16: FRR16_JALRC_RA_only_ins<0, 0, "jr", IIM16Alu> {
+def JrRa16: FRR16_JALRC_RA_only_ins<0, "jr", IIM16Alu> {
   let isBranch = 1;
   let isIndirectBranch = 1;
   let hasDelaySlot = 1;
   let isTerminator=1;
-  let isBarrier=1;
-  let isReturn=1;
+  let isBarrier = 1;
+  let isReturn = 1;
 }
 
-def JrcRa16: FRR16_JALRC_RA_only_ins<1, 1, "jrc", IIM16Alu> {
+def JrcRa16: FRR16_JALRC_RA_only_ins<1, "jrc", IIM16Alu> {
   let isBranch = 1;
   let isIndirectBranch = 1;
+  let hasDelaySlot = 0;
   let isTerminator=1;
   let isBarrier=1;
   let isReturn=1;
 }
 
-def JrcRx16: FRR16_JALRC_ins<1, 1, 0, "jrc", IIM16Alu> {
+//
+// Format: JR(C) rx MIPS16e
+// Purpose: Jump Register Through MIPS16e GPR
+// To execute a branch to an instruction address in a register.
+def JrRx16: FRR16_JALRC_RX_only_ins<0, "jr", IIM16Alu> {
   let isBranch = 1;
   let isIndirectBranch = 1;
-  let isTerminator=1;
-  let isBarrier=1;
+  let hasDelaySlot = 1;
+  let isTerminator = 1;
+  let isBarrier = 1;
 }
+
+def JrcRx16: FRR16_JALRC_RX_only_ins<1, "jrc", IIM16Alu> {
+  let isBranch = 1;
+  let isIndirectBranch = 1;
+  let hasDelaySlot = 0;
+  let isTerminator = 1;
+  let isBarrier = 1;
+}
+
 //
 // Format: LB ry, offset(rx) MIPS16e
 // Purpose: Load Byte (Extended)
@@ -1464,12 +1519,8 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 }
 
 // Jump and Link (Call)
-let isCall=1, hasDelaySlot=0 in
-def JumpLinkReg16:
-  FRR16_JALRC<0, 0, 0, (outs), (ins CPU16Opnd:$rs),
-              "jalrc\t$rs", [(MipsJmpLink CPU16Opnd:$rs)], II_JALRC> {
-  let Defs = [RA];
-}
+def : Mips16Pat<(MipsJmpLink CPU16Opnd:$rx),
+                (JalrcRaRx16 RA, CPU16Opnd:$rx)>;
 
 // Mips16 pseudos
 let isReturn=1, isTerminator=1, hasDelaySlot=1, isBarrier=1, hasCtrlDep=1,

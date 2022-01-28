@@ -337,9 +337,10 @@ def : InstRW<[GenericWriteJump], (instrs Bimm16, BimmX16, BeqzRxImm16,
                                   BtnezT8CmpX16, BtnezT8CmpiX16,
                                   BtnezT8SltX16, BtnezT8SltuX16,
                                   BtnezT8SltiX16, BtnezT8SltiuX16, JrRa16,
-                                  JrcRa16, JrcRx16, RetRA16)>;
+                                  JrcRa16, JrRx16, JrcRx16, RetRA16)>;
 
-def : InstRW<[GenericWriteJumpAndLink], (instrs Jal16, JalB16, JumpLinkReg16)>;
+def : InstRW<[GenericWriteJumpAndLink], (instrs Jal16, JalB16, Jal16imm,
+                                         JalrRaRx16, JalrcRaRx16, Jalx16)>;
 
 def : InstRW<[GenericWriteTrap], (instrs Break16)>;
 

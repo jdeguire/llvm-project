@@ -667,8 +667,15 @@ def SImm32RelaxedAsmOperandClass
 }
 def SImm32AsmOperandClass
     : SImmAsmOperandClass<32, [SImm32RelaxedAsmOperandClass]>;
+def ConstantUImm26Lsl2AsmOperandClass : AsmOperandClass {
+  let Name = "UImm26Lsl2";
+  let RenderMethod = "addImmOperands";
+  let PredicateMethod = "isScaledUImm<26, 2>";
+  let SuperClasses = [SImm32AsmOperandClass];
+  let DiagnosticType = "UImm26_Lsl2";
+}
 def ConstantUImm26AsmOperandClass
-    : ConstantUImmAsmOperandClass<26, [SImm32AsmOperandClass]>;
+    : ConstantUImmAsmOperandClass<26, [ConstantUImm26Lsl2AsmOperandClass]>;
 def ConstantUImm20AsmOperandClass
     : ConstantUImmAsmOperandClass<20, [ConstantUImm26AsmOperandClass]>;
 def ConstantSImm19Lsl2AsmOperandClass : AsmOperandClass {
@@ -963,6 +970,12 @@ def uimm6_lsl2 : Operand<OtherVT> {
   let EncoderMethod = "getUImm6Lsl2Encoding";
   let DecoderMethod = "DecodeUImmWithOffsetAndScale<6, 0, 4>";
   let ParserMatchClass = ConstantUImm6Lsl2AsmOperandClass;
+}
+
+def uimm26_lsl2 : Operand<OtherVT> {
+  let EncoderMethod = "getUImm26Lsl2Encoding";
+  let DecoderMethod = "DecodeUImmWithOffsetAndScale<26, 0, 4>";
+  let ParserMatchClass = ConstantUImm26Lsl2AsmOperandClass;
 }
 
 foreach I = {16} in
