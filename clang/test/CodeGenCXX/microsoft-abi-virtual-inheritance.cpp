@@ -1,9 +1,9 @@
-// RUN: %clang_cc1 %s -fno-rtti -std=c++11 -Wno-inaccessible-base -triple=i386-pc-win32 -emit-llvm -o %t
+// RUN: %clang_cc1 -no-opaque-pointers %s -fno-rtti -std=c++11 -Wno-inaccessible-base -triple=i386-pc-win32 -emit-llvm -o %t
 // RUN: FileCheck %s < %t
 // RUN: FileCheck --check-prefix=CHECK2 %s < %t
 
 // For now, just make sure x86_64 doesn't crash.
-// RUN: %clang_cc1 %s -fno-rtti -std=c++11 -Wno-inaccessible-base -triple=x86_64-pc-win32 -emit-llvm -o %t
+// RUN: %clang_cc1 -no-opaque-pointers %s -fno-rtti -std=c++11 -Wno-inaccessible-base -triple=x86_64-pc-win32 -emit-llvm -o %t
 
 struct VBase {
   virtual ~VBase();
@@ -335,7 +335,7 @@ struct C : B, A { C() {} };
 void callC() { C x; }
 
 // CHECK-LABEL: define linkonce_odr dso_local x86_thiscallcc noundef %"struct.test2::C"* @"??0C@test2@@QAE@XZ"
-// CHECK:           (%"struct.test2::C"* {{[^,]*}} returned %this, i32 noundef %is_most_derived)
+// CHECK:           (%"struct.test2::C"* {{[^,]*}} returned align 4 dereferenceable(8) %this, i32 noundef %is_most_derived)
 // CHECK: br i1
 //   Virtual bases
 // CHECK: call x86_thiscallcc noundef %"struct.test2::A"* @"??0A@test2@@QAE@XZ"(%"struct.test2::A"* {{[^,]*}} %{{.*}})
@@ -346,7 +346,7 @@ void callC() { C x; }
 // CHECK: ret
 
 // CHECK2-LABEL: define linkonce_odr dso_local x86_thiscallcc noundef %"struct.test2::B"* @"??0B@test2@@QAE@XZ"
-// CHECK2:           (%"struct.test2::B"* {{[^,]*}} returned %this, i32 noundef %is_most_derived)
+// CHECK2:           (%"struct.test2::B"* {{[^,]*}} returned align 4 dereferenceable(4) %this, i32 noundef %is_most_derived)
 // CHECK2: call x86_thiscallcc noundef %"struct.test2::A"* @"??0A@test2@@QAE@XZ"(%"struct.test2::A"* {{[^,]*}} %{{.*}})
 // CHECK2: ret
 

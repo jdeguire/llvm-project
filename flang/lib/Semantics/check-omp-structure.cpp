@@ -519,7 +519,7 @@ void OmpStructureChecker::CheckTargetNest(const parser::OpenMPConstruct &c) {
   if (!eligibleTarget) {
     context_.Say(parser::FindSourceLocation(c),
         "If %s directive is nested inside TARGET region, the behaviour "
-        "is unspecified"_en_US,
+        "is unspecified"_port_en_US,
         parser::ToUpperCaseLetters(
             getDirectiveName(ineligibleTargetDir).str()));
   }
@@ -673,7 +673,6 @@ void OmpStructureChecker::Enter(const parser::OpenMPBlockConstruct &x) {
   }
 
   if (CurrentDirectiveIsNested()) {
-    CheckIfDoOrderedClause(beginDir);
     if (llvm::omp::teamSet.test(GetContextParent().directive)) {
       HasInvalidTeamsNesting(beginDir.v, beginDir.source);
     }
@@ -740,27 +739,6 @@ void OmpStructureChecker::CheckMasterNesting(
   }
 }
 
-void OmpStructureChecker::CheckIfDoOrderedClause(
-    const parser::OmpBlockDirective &blkDirective) {
-  if (blkDirective.v == llvm::omp::OMPD_ordered) {
-    // Loops
-    if (llvm::omp::doSet.test(GetContextParent().directive) &&
-        !FindClauseParent(llvm::omp::Clause::OMPC_ordered)) {
-      context_.Say(blkDirective.source,
-          "The ORDERED clause must be present on the loop"
-          " construct if any ORDERED region ever binds"
-          " to a loop region arising from the loop construct."_err_en_US);
-    }
-    // Other disallowed nestings, these directives do not support
-    // ordered clause in them, so no need to check
-    else if (IsCloselyNestedRegion(llvm::omp::nestedOrderedErrSet)) {
-      context_.Say(blkDirective.source,
-          "`ORDERED` region may not be closely nested inside of "
-          "`CRITICAL`, `ORDERED`, explicit `TASK` or `TASKLOOP` region."_err_en_US);
-    }
-  }
-}
-
 void OmpStructureChecker::Leave(const parser::OpenMPBlockConstruct &) {
   if (GetDirectiveNest(TargetBlockOnlyTeams)) {
     ExitDirectiveNest(TargetBlockOnlyTeams);
@@ -776,6 +754,68 @@ void OmpStructureChecker::ChecksOnOrderedAsBlock() {
     context_.Say(GetContext().clauseSource,
         "DEPEND(*) clauses are not allowed when ORDERED construct is a block"
         " construct with an ORDERED region"_err_en_US);
+    return;
+  }
+
+  OmpDirectiveSet notAllowedParallelSet{llvm::omp::Directive::OMPD_parallel,
+      llvm::omp::Directive::OMPD_target_parallel,
+      llvm::omp::Directive::OMPD_parallel_sections,
+      llvm::omp::Directive::OMPD_parallel_workshare};
+  bool isNestedInDo{false};
+  bool isNestedInDoSIMD{false};
+  bool isNestedInSIMD{false};
+  bool noOrderedClause{false};
+  bool isOrderedClauseWithPara{false};
+  bool isCloselyNestedRegion{true};
+  if (CurrentDirectiveIsNested()) {
+    for (int i = (int)dirContext_.size() - 2; i >= 0; i--) {
+      if (llvm::omp::nestedOrderedErrSet.test(dirContext_[i].directive)) {
+        context_.Say(GetContext().directiveSource,
+            "`ORDERED` region may not be closely nested inside of `CRITICAL`, "
+            "`ORDERED`, explicit `TASK` or `TASKLOOP` region."_err_en_US);
+        break;
+      } else if (llvm::omp::doSet.test(dirContext_[i].directive)) {
+        isNestedInDo = true;
+        isNestedInDoSIMD = llvm::omp::doSimdSet.test(dirContext_[i].directive);
+        if (const auto *clause{
+                FindClause(dirContext_[i], llvm::omp::Clause::OMPC_ordered)}) {
+          const auto &orderedClause{
+              std::get<parser::OmpClause::Ordered>(clause->u)};
+          const auto orderedValue{GetIntValue(orderedClause.v)};
+          isOrderedClauseWithPara = orderedValue > 0;
+        } else {
+          noOrderedClause = true;
+        }
+        break;
+      } else if (llvm::omp::simdSet.test(dirContext_[i].directive)) {
+        isNestedInSIMD = true;
+        break;
+      } else if (notAllowedParallelSet.test(dirContext_[i].directive)) {
+        isCloselyNestedRegion = false;
+        break;
+      }
+    }
+  }
+
+  if (!isCloselyNestedRegion) {
+    context_.Say(GetContext().directiveSource,
+        "An ORDERED directive without the DEPEND clause must be closely nested "
+        "in a SIMD, worksharing-loop, or worksharing-loop SIMD "
+        "region"_err_en_US);
+  } else {
+    if (CurrentDirectiveIsNested() &&
+        FindClause(llvm::omp::Clause::OMPC_simd) &&
+        (!isNestedInDoSIMD && !isNestedInSIMD)) {
+      context_.Say(GetContext().directiveSource,
+          "An ORDERED directive with SIMD clause must be closely nested in a "
+          "SIMD or worksharing-loop SIMD region"_err_en_US);
+    }
+    if (isNestedInDo && (noOrderedClause || isOrderedClauseWithPara)) {
+      context_.Say(GetContext().directiveSource,
+          "An ORDERED directive without the DEPEND clause must be closely "
+          "nested in a worksharing-loop (or worksharing-loop SIMD) region with "
+          "ORDERED clause without the parameter"_err_en_US);
+    }
   }
 }
 
@@ -801,8 +841,9 @@ void OmpStructureChecker::Enter(const parser::OpenMPSectionsConstruct &x) {
 
   PushContextAndClauseSets(beginDir.source, beginDir.v);
   const auto &sectionBlocks{std::get<parser::OmpSectionBlocks>(x.t)};
-  for (const auto &block : sectionBlocks.v) {
-    CheckNoBranching(block, beginDir.v, beginDir.source);
+  for (const parser::OpenMPConstruct &block : sectionBlocks.v) {
+    CheckNoBranching(std::get<parser::OpenMPSectionConstruct>(block.u).v,
+        beginDir.v, beginDir.source);
   }
   HasInvalidWorksharingNesting(
       beginDir.source, llvm::omp::nestedWorkshareErrSet);
@@ -874,7 +915,7 @@ void OmpStructureChecker::CheckThreadprivateOrDeclareTargetVar(
                       llvm::omp::Directive::OMPD_declare_target)
                     context_.Say(name->source,
                         "The entity with PARAMETER attribute is used in a %s "
-                        "directive"_en_US,
+                        "directive"_warn_en_US,
                         ContextDirectiveAsFortran());
                 } else if (FindCommonBlockContaining(*name->symbol)) {
                   context_.Say(name->source,
@@ -1060,6 +1101,50 @@ void OmpStructureChecker::ChecksOnOrderedAsStandalone() {
           "Only DEPEND(SOURCE) or DEPEND(SINK: vec) are allowed when ORDERED "
           "construct is a standalone construct with no ORDERED "
           "region"_err_en_US);
+    }
+  }
+
+  OmpDirectiveSet allowedDoSet{llvm::omp::Directive::OMPD_do,
+      llvm::omp::Directive::OMPD_parallel_do,
+      llvm::omp::Directive::OMPD_target_parallel_do};
+  bool isNestedInDoOrderedWithPara{false};
+  if (CurrentDirectiveIsNested() &&
+      allowedDoSet.test(GetContextParent().directive)) {
+    if (const auto *clause{
+            FindClause(GetContextParent(), llvm::omp::Clause::OMPC_ordered)}) {
+      const auto &orderedClause{
+          std::get<parser::OmpClause::Ordered>(clause->u)};
+      const auto orderedValue{GetIntValue(orderedClause.v)};
+      if (orderedValue > 0) {
+        isNestedInDoOrderedWithPara = true;
+        CheckOrderedDependClause(orderedValue);
+      }
+    }
+  }
+
+  if (FindClause(llvm::omp::Clause::OMPC_depend) &&
+      !isNestedInDoOrderedWithPara) {
+    context_.Say(GetContext().clauseSource,
+        "An ORDERED construct with the DEPEND clause must be closely nested "
+        "in a worksharing-loop (or parallel worksharing-loop) construct with "
+        "ORDERED clause with a parameter"_err_en_US);
+  }
+}
+
+void OmpStructureChecker::CheckOrderedDependClause(
+    std::optional<std::int64_t> orderedValue) {
+  auto clauseAll{FindClauses(llvm::omp::Clause::OMPC_depend)};
+  for (auto itr = clauseAll.first; itr != clauseAll.second; ++itr) {
+    const auto &dependClause{
+        std::get<parser::OmpClause::Depend>(itr->second->u)};
+    if (const auto *sinkVectors{
+            std::get_if<parser::OmpDependClause::Sink>(&dependClause.v.u)}) {
+      std::int64_t numVar = sinkVectors->v.size();
+      if (orderedValue != numVar) {
+        context_.Say(itr->second->source,
+            "The number of variables in DEPEND(SINK: vec) clause does not "
+            "match the parameter specified in ORDERED clause"_err_en_US);
+      }
     }
   }
 }
@@ -1324,13 +1409,169 @@ void OmpStructureChecker::Leave(const parser::OmpEndBlockDirective &x) {
   }
 }
 
+template <typename T, typename D>
+bool OmpStructureChecker::IsOperatorValid(const T &node, const D &variable) {
+  using AllowedBinaryOperators =
+      std::variant<parser::Expr::Add, parser::Expr::Multiply,
+          parser::Expr::Subtract, parser::Expr::Divide, parser::Expr::AND,
+          parser::Expr::OR, parser::Expr::EQV, parser::Expr::NEQV>;
+  using BinaryOperators = std::variant<parser::Expr::Add,
+      parser::Expr::Multiply, parser::Expr::Subtract, parser::Expr::Divide,
+      parser::Expr::AND, parser::Expr::OR, parser::Expr::EQV,
+      parser::Expr::NEQV, parser::Expr::Power, parser::Expr::Concat,
+      parser::Expr::LT, parser::Expr::LE, parser::Expr::EQ, parser::Expr::NE,
+      parser::Expr::GE, parser::Expr::GT>;
+
+  if constexpr (common::HasMember<T, BinaryOperators>) {
+    const auto &variableName{variable.GetSource().ToString()};
+    const auto &exprLeft{std::get<0>(node.t)};
+    const auto &exprRight{std::get<1>(node.t)};
+    if ((exprLeft.value().source.ToString() != variableName) &&
+        (exprRight.value().source.ToString() != variableName)) {
+      context_.Say(variable.GetSource(),
+          "Atomic update variable '%s' not found in the RHS of the "
+          "assignment statement in an ATOMIC (UPDATE) construct"_err_en_US,
+          variableName);
+    }
+    return common::HasMember<T, AllowedBinaryOperators>;
+  }
+  return true;
+}
+
+void OmpStructureChecker::CheckAtomicUpdateAssignmentStmt(
+    const parser::AssignmentStmt &assignment) {
+  const auto &expr{std::get<parser::Expr>(assignment.t)};
+  const auto &var{std::get<parser::Variable>(assignment.t)};
+  std::visit(
+      common::visitors{
+          [&](const common::Indirection<parser::FunctionReference> &x) {
+            const auto &procedureDesignator{
+                std::get<parser::ProcedureDesignator>(x.value().v.t)};
+            const parser::Name *name{
+                std::get_if<parser::Name>(&procedureDesignator.u)};
+            if (name &&
+                !(name->source == "max" || name->source == "min" ||
+                    name->source == "iand" || name->source == "ior" ||
+                    name->source == "ieor")) {
+              context_.Say(expr.source,
+                  "Invalid intrinsic procedure name in "
+                  "OpenMP ATOMIC (UPDATE) statement"_err_en_US);
+            } else if (name) {
+              bool foundMatch{false};
+              if (auto varDesignatorIndirection =
+                      std::get_if<Fortran::common::Indirection<
+                          Fortran::parser::Designator>>(&var.u)) {
+                const auto &varDesignator = varDesignatorIndirection->value();
+                if (const auto *dataRef = std::get_if<Fortran::parser::DataRef>(
+                        &varDesignator.u)) {
+                  if (const auto *name =
+                          std::get_if<Fortran::parser::Name>(&dataRef->u)) {
+                    const auto &varSymbol = *name->symbol;
+                    if (const auto *e{GetExpr(expr)}) {
+                      for (const Symbol &symbol :
+                          evaluate::CollectSymbols(*e)) {
+                        if (symbol == varSymbol) {
+                          foundMatch = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              if (!foundMatch) {
+                context_.Say(expr.source,
+                    "Atomic update variable '%s' not found in the "
+                    "argument list of intrinsic procedure"_err_en_US,
+                    var.GetSource().ToString());
+              }
+            }
+          },
+          [&](const auto &x) {
+            if (!IsOperatorValid(x, var)) {
+              context_.Say(expr.source,
+                  "Invalid operator in OpenMP ATOMIC (UPDATE) statement"_err_en_US);
+            }
+          },
+      },
+      expr.u);
+}
+
+void OmpStructureChecker::CheckAtomicMemoryOrderClause(
+    const parser::OmpAtomicClauseList &clauseList) {
+  int numMemoryOrderClause = 0;
+  for (const auto &clause : clauseList.v) {
+    if (std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      numMemoryOrderClause++;
+      if (numMemoryOrderClause > 1) {
+        context_.Say(clause.source,
+            "More than one memory order clause not allowed on OpenMP "
+            "Atomic construct"_err_en_US);
+        return;
+      }
+    }
+  }
+}
+
+void OmpStructureChecker::CheckAtomicMemoryOrderClause(
+    const parser::OmpAtomicClauseList &leftHandClauseList,
+    const parser::OmpAtomicClauseList &rightHandClauseList) {
+  int numMemoryOrderClause = 0;
+  for (const auto &clause : leftHandClauseList.v) {
+    if (std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      numMemoryOrderClause++;
+      if (numMemoryOrderClause > 1) {
+        context_.Say(clause.source,
+            "More than one memory order clause not allowed on "
+            "OpenMP Atomic construct"_err_en_US);
+        return;
+      }
+    }
+  }
+  for (const auto &clause : rightHandClauseList.v) {
+    if (std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      numMemoryOrderClause++;
+      if (numMemoryOrderClause > 1) {
+        context_.Say(clause.source,
+            "More than one memory order clause not "
+            "allowed on OpenMP Atomic construct"_err_en_US);
+        return;
+      }
+    }
+  }
+}
+
 void OmpStructureChecker::Enter(const parser::OpenMPAtomicConstruct &x) {
   std::visit(
       common::visitors{
-          [&](const auto &someAtomicConstruct) {
-            const auto &dir{std::get<parser::Verbatim>(someAtomicConstruct.t)};
+          [&](const parser::OmpAtomic &atomicConstruct) {
+            const auto &dir{std::get<parser::Verbatim>(atomicConstruct.t)};
             PushContextAndClauseSets(
                 dir.source, llvm::omp::Directive::OMPD_atomic);
+            CheckAtomicUpdateAssignmentStmt(
+                std::get<parser::Statement<parser::AssignmentStmt>>(
+                    atomicConstruct.t)
+                    .statement);
+            CheckAtomicMemoryOrderClause(
+                std::get<parser::OmpAtomicClauseList>(atomicConstruct.t));
+          },
+          [&](const parser::OmpAtomicUpdate &atomicConstruct) {
+            const auto &dir{std::get<parser::Verbatim>(atomicConstruct.t)};
+            PushContextAndClauseSets(
+                dir.source, llvm::omp::Directive::OMPD_atomic);
+            CheckAtomicUpdateAssignmentStmt(
+                std::get<parser::Statement<parser::AssignmentStmt>>(
+                    atomicConstruct.t)
+                    .statement);
+            CheckAtomicMemoryOrderClause(
+                std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
+          },
+          [&](const auto &atomicConstruct) {
+            const auto &dir{std::get<parser::Verbatim>(atomicConstruct.t)};
+            PushContextAndClauseSets(
+                dir.source, llvm::omp::Directive::OMPD_atomic);
+            CheckAtomicMemoryOrderClause(
+                std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
           },
       },
       x.u);
@@ -1506,7 +1747,6 @@ CHECK_SIMPLE_CLAUSE(Default, OMPC_default)
 CHECK_SIMPLE_CLAUSE(Depobj, OMPC_depobj)
 CHECK_SIMPLE_CLAUSE(Destroy, OMPC_destroy)
 CHECK_SIMPLE_CLAUSE(Detach, OMPC_detach)
-CHECK_SIMPLE_CLAUSE(Device, OMPC_device)
 CHECK_SIMPLE_CLAUSE(DeviceType, OMPC_device_type)
 CHECK_SIMPLE_CLAUSE(DistSchedule, OMPC_dist_schedule)
 CHECK_SIMPLE_CLAUSE(DynamicAllocators, OMPC_dynamic_allocators)
@@ -1527,6 +1767,7 @@ CHECK_SIMPLE_CLAUSE(Threadprivate, OMPC_threadprivate)
 CHECK_SIMPLE_CLAUSE(Threads, OMPC_threads)
 CHECK_SIMPLE_CLAUSE(Inbranch, OMPC_inbranch)
 CHECK_SIMPLE_CLAUSE(IsDevicePtr, OMPC_is_device_ptr)
+CHECK_SIMPLE_CLAUSE(HasDeviceAddr, OMPC_has_device_addr)
 CHECK_SIMPLE_CLAUSE(Link, OMPC_link)
 CHECK_SIMPLE_CLAUSE(Indirect, OMPC_indirect)
 CHECK_SIMPLE_CLAUSE(Mergeable, OMPC_mergeable)
@@ -1571,6 +1812,7 @@ CHECK_REQ_SCALAR_INT_CLAUSE(NumTeams, OMPC_num_teams)
 CHECK_REQ_SCALAR_INT_CLAUSE(NumThreads, OMPC_num_threads)
 CHECK_REQ_SCALAR_INT_CLAUSE(Priority, OMPC_priority)
 CHECK_REQ_SCALAR_INT_CLAUSE(ThreadLimit, OMPC_thread_limit)
+CHECK_REQ_SCALAR_INT_CLAUSE(Device, OMPC_device)
 
 CHECK_REQ_CONSTANT_SCALAR_INT_CLAUSE(Collapse, OMPC_collapse)
 CHECK_REQ_CONSTANT_SCALAR_INT_CLAUSE(Safelen, OMPC_safelen)

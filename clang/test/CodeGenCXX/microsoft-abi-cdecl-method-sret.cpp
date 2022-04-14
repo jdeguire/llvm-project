@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple i386-pc-win32 -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -no-opaque-pointers -triple i386-pc-win32 -emit-llvm %s -o - | FileCheck %s
 
 // PR15768
 
@@ -41,4 +41,4 @@ struct A {
 S A::f(int x) {
   return S();
 }
-// CHECK-LABEL: define dso_local x86_fastcallcc void @"?f@A@@QAI?AUS@@H@Z"(%struct.A* inreg noundef %this, %struct.S* inreg noalias sret(%struct.S) align 4 %agg.result, i32 noundef %x)
+// CHECK-LABEL: define dso_local x86_fastcallcc void @"?f@A@@QAI?AUS@@H@Z"(%struct.A* inreg noundef nonnull align 1 dereferenceable(1) %this, %struct.S* inreg noalias sret(%struct.S) align 4 %agg.result, i32 noundef %x)

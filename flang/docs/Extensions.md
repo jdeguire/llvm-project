@@ -67,10 +67,13 @@ end
 * If both the `COUNT=` and the `COUNT_MAX=` optional arguments are
   present on the same call to the intrinsic subroutine `SYSTEM_CLOCK`,
   we require that their types have the same integer kind, since the
-  kind of these arguments is used to select the clock rate.
-  In common with some other compilers, the clock is in milliseconds
-  for kinds <= 4 and nanoseconds otherwise where the target system
-  supports these rates.
+  kind of these arguments is used to select the clock rate.  In common
+  with some other compilers, the clock rate varies from tenths of a
+  second to nanoseconds depending on argument kind and platform support.
+* If a dimension of a descriptor has zero extent in a call to
+  `CFI_section`, `CFI_setpointer` or `CFI_allocate`, the lower
+  bound on that dimension will be set to 1 for consistency with
+  the `LBOUND()` intrinsic function.
 
 ## Extensions, deletions, and legacy features supported by default
 
@@ -141,7 +144,9 @@ end
   not be known (e.g., `IAND(X'1',X'2')`).
 * BOZ literals can also be used as REAL values in some contexts where the
   type is unambiguous, such as initializations of REAL parameters.
-* EQUIVALENCE of numeric and character sequences (a ubiquitous extension)
+* EQUIVALENCE of numeric and character sequences (a ubiquitous extension),
+  as well as of sequences of non-default kinds of numeric types
+  with each other.
 * Values for whole anonymous parent components in structure constructors
   (e.g., `EXTENDEDTYPE(PARENTTYPE(1,2,3))` rather than `EXTENDEDTYPE(1,2,3)`
    or `EXTENDEDTYPE(PARENTTYPE=PARENTTYPE(1,2,3))`).
@@ -212,6 +217,14 @@ end
   This legacy extension supports pre-Fortran'77 usage in which
   variables initialized in DATA statements with Hollerith literals
   as modifiable formats.
+* At runtime, `NAMELIST` input will skip over `NAMELIST` groups
+  with other names, and will treat text before and between groups
+  as if they were comment lines, even if not begun with `!`.
+* Commas are required in FORMAT statements and character variables
+  only when they prevent ambiguity.
+* Legacy names `AND`, `OR`, and `XOR` are accepted as aliases for
+  the standard intrinsic functions `IAND`, `IOR`, and `IEOR`
+  respectively.
 
 ### Extensions supported when enabled by options
 
