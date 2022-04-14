@@ -16,13 +16,43 @@
 def addr16 : ComplexPattern<iPTR, 2, "selectAddr16", [frameindex]>;
 def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 
+// The number matches the value in MipsRegisterInfo::MipsPtrClass.
+def ptr_cpu16_rc : PointerLikeRegClass<4>;
+
+// TODO: This should probably become a base class for other memory classes and records.
+class Mips16MemAsmOperand : AsmOperandClass {
+  let Name = "Mips16Mem";
+  let ParserMethod = "parseMemOperand";
+  let RenderMethod = "addMips16MemOperands";
+}
+
+// This is used for the extended 32-bit MIPS16 instructions. 
+def Mips16ExtMemAsmOperand : Mips16MemAsmOperand {
+  let Name = "Mips16ExtMem";
+//  let ParserMethod = "parseMemOperand";
+  let PredicateMethod = "isMemWithCPU16Base";
+//  let RenderMethod = "addMips16MemOperands";
+}
+
+
+// mem_generic is found in MipsInstrInfo.td.
+def mem16ext : mem_generic {
+  let ParserMatchClass = Mips16ExtMemAsmOperand;
+  let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
+  // TODO: This will probably need a custom EncoderMethod for EXT instructions. Does it need a DecoderMethod?
+//  let EncoderMethod = "getMemEncoding";
+}
+
+
 //
 // Address operand
-def mem16 : Operand<i32> {
-  let PrintMethod = "printMemOperand";
-  let MIOperandInfo = (ops CPU16Opnd, simm16);
-  let EncoderMethod = "getMemEncoding";
-}
+//def mem16 : Operand<i32> {  // <-- This probably needs to inherit from one of the Memory Operand types rather than Operand<i32>
+//def mem16 : mem16ext {
+//  let PrintMethod = "printMemOperand";
+//  let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
+  // TODO: This will probably need a custom EncoderMethod. Does it need a DecoderMethod?
+//  let EncoderMethod = "getMemEncoding";
+//}
 
 // TODO: This will probably need to go away if the seprate SP-relative operand works. It won't work
 //       anyway because using SP is actually a different instruction code, not just an operand.
@@ -52,9 +82,7 @@ def pcrel16 : Operand<i32>;
 // define "pseudo register" operands to handle such instructions.
 def Mips16PCPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16PCPseudoReg";
-//  let ParserMethod = "parsePseudoRegister";
   let PredicateMethod = "isPCPseudoReg";
-//  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addPCPseudoRegOperands";
 }
 def PCPseudoReg : Operand<i32> {
@@ -64,9 +92,7 @@ def PCPseudoReg : Operand<i32> {
 
 def Mips16SPPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16SPPseudoReg";
-//  let ParserMethod = "parsePseudoRegister";
   let PredicateMethod = "isSPPseudoReg";
-//  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addSPPseudoRegOperands";
 }
 def SPPseudoReg : Operand<i32> {
@@ -76,9 +102,7 @@ def SPPseudoReg : Operand<i32> {
 
 def Mips16RAPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16RAPseudoReg";
-//  let ParserMethod = "parsePseudoRegister";
   let PredicateMethod = "isRAPseudoReg";
-//  let RenderMethod = "addPseudoRegisterOperands";
   let RenderMethod = "addRAPseudoRegOperands";
 }
 def RAPseudoReg : Operand<i32> {
@@ -930,8 +954,8 @@ def JrcRx16: FRR16_JALRC_RX_only_ins<1, "jrc", IIM16Alu> {
 // Purpose: Load Byte (Extended)
 // To load a byte from memory as a signed value.
 //
-def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lb", mem16, II_LB>, MayLoad{
-  let isCodeGenOnly = 1;
+def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10000, "lb", mem16ext, II_LB>, MayLoad{
+//  let isCodeGenOnly = 1;
 }
 
 //
@@ -940,8 +964,8 @@ def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lb", mem16, II_LB>, MayLoad{
 // To load a byte from memory as a unsigned value.
 //
 def LbuRxRyOffMemX16:
-  FEXT_RRI16_mem_ins<0b10100, "lbu", mem16, II_LBU>, MayLoad {
-  let isCodeGenOnly = 1;
+  FEXT_RRI16_mem_ins<0b10100, "lbu", mem16ext, II_LBU>, MayLoad {
+//  let isCodeGenOnly = 1;
 }
 
 //
@@ -949,8 +973,8 @@ def LbuRxRyOffMemX16:
 // Purpose: Load Halfword signed (Extended)
 // To load a halfword from memory as a signed value.
 //
-def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10100, "lh", mem16, II_LH>, MayLoad{
-  let isCodeGenOnly = 1;
+def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10001, "lh", mem16ext, II_LH>, MayLoad{
+//  let isCodeGenOnly = 1;
 }
 
 //
@@ -959,8 +983,8 @@ def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10100, "lh", mem16, II_LH>, MayLoad{
 // To load a halfword from memory as an unsigned value.
 //
 def LhuRxRyOffMemX16:
-  FEXT_RRI16_mem_ins<0b10100, "lhu", mem16, II_LHU>, MayLoad {
-  let isCodeGenOnly = 1;
+  FEXT_RRI16_mem_ins<0b10101, "lhu", mem16ext, II_LHU>, MayLoad {
+//  let isCodeGenOnly = 1;
 }
 
 //
@@ -986,8 +1010,8 @@ def LiRxImmAlignX16: FEXT_RI16_ins<0b01101, ".align 2\n\tli", IIM16Alu> {
 // Purpose: Load Word (Extended)
 // To load a word from memory as a signed value.
 //
-def LwRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lw", mem16, II_LW>, MayLoad{
-  let isCodeGenOnly = 1;
+def LwRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lw", mem16ext, II_LW>, MayLoad{
+//  let isCodeGenOnly = 1;
 }
 
 // Format: LW rx, offset(sp) MIPS16e
@@ -1004,7 +1028,9 @@ def LwRxPcTcpX16: FEXT_RI16_TCP_ins<0b10110, "lw", II_LW>, MayLoad;
 // Purpose: Move
 // To move the contents of a GPR to a GPR.
 //
-def Move32R16: FI8_MOV32R16_ins<"move", IIM16Alu>;
+def Move32R16: FI8_MOV32R16_ins<"move", IIM16Alu> {
+  let isMoveReg = 1;
+}
 
 //
 // Format: MOVE ry, r32 MIPS16e
@@ -1149,7 +1175,7 @@ def SaveX16:
 // To store a byte to memory.
 //
 def SbRxRyOffMemX16:
-  FEXT_RRI16_mem2_ins<0b11000, "sb", mem16, II_SB>, MayStore;
+  FEXT_RRI16_mem2_ins<0b11000, "sb", mem16ext, II_SB>, MayStore;
 
 //
 // Format: SEB rx MIPS16e
@@ -1287,7 +1313,7 @@ def SelTBtneZSltiu: SeliT<"btnez", "sltiu">;
 // To store a halfword to memory.
 //
 def ShRxRyOffMemX16:
-  FEXT_RRI16_mem2_ins<0b11001, "sh", mem16, II_SH>, MayStore;
+  FEXT_RRI16_mem2_ins<0b11001, "sh", mem16ext, II_SH>, MayStore;
 
 //
 // Format: SLL rx, ry, sa MIPS16e
@@ -1422,7 +1448,7 @@ def SubuRxRyRz16: FRRR16_ins<0b11, "subu", IIM16Alu>, ArithLogic16Defs<0>;
 // Purpose: Store Word (Extended)
 // To store a word to memory.
 //
-def SwRxRyOffMemX16: FEXT_RRI16_mem2_ins<0b11011, "sw", mem16, II_SW>, MayStore;
+def SwRxRyOffMemX16: FEXT_RRI16_mem2_ins<0b11011, "sw", mem16ext, II_SW>, MayStore;
 
 //
 // Format: SW rx, offset(sp) MIPS16e
@@ -1519,8 +1545,8 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 }
 
 // Jump and Link (Call)
-def : Mips16Pat<(MipsJmpLink CPU16Opnd:$rx),
-                (JalrcRaRx16 RA, CPU16Opnd:$rx)>;
+def : Mips16Pat<(MipsJmpLink CPU16Regs:$rx),
+                (JalrcRaRx16 RA, CPU16Regs:$rx)>;
 
 // Mips16 pseudos
 let isReturn=1, isTerminator=1, hasDelaySlot=1, isBarrier=1, hasCtrlDep=1,

@@ -813,14 +813,14 @@ public:
     RegKind_HWRegs = 256, /// HWRegs
     RegKind_COP3 = 512,   /// COP3
     RegKind_COP0 = 1024,  /// COP0
-    RegKind_PC = 2048,    /// Program counter (not a real register; used in
-                          /// some MIPS16 instructions).
     /// Potentially any (e.g. $1)
     // This purposefully does not include RegKind_PC because it is not a real
     // register and has no number.
     RegKind_Numeric = RegKind_GPR | RegKind_FGR | RegKind_FCC | RegKind_MSA128 |
                       RegKind_MSACtrl | RegKind_COP2 | RegKind_ACC |
-                      RegKind_CCR | RegKind_HWRegs | RegKind_COP3 | RegKind_COP0
+                      RegKind_CCR | RegKind_HWRegs | RegKind_COP3 | RegKind_COP0,
+    RegKind_PC = 2048     /// Program counter (not a real register; used in
+                          /// some MIPS16 instructions).
   };
 
 private:
@@ -1309,6 +1309,15 @@ public:
     addExpr(Inst, Expr);
   }
 
+  void addMips16MemOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 2 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createReg(getMemBase()->getCPU16Reg()));
+
+    const MCExpr *Expr = getMemOff();
+    addExpr(Inst, Expr);
+  }
+
   void addRegListOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
 
@@ -1405,6 +1414,10 @@ public:
 
   bool isMemWithGRPMM16Base() const {
     return isMem() && getMemBase()->isMM16AsmReg();
+  }
+
+  bool isMemWithCPU16Base() const {
+    return isMem() && getMemBase()->isCPU16AsmReg();
   }
 
   template <unsigned Bits> bool isMemWithUimmOffsetSP() const {
