@@ -1443,6 +1443,7 @@ bool CursorVisitor::VisitTemplateName(TemplateName Name, SourceLocation Loc) {
   switch (Name.getKind()) {
   case TemplateName::Template:
   case TemplateName::UsingTemplate:
+  case TemplateName::QualifiedTemplate: // FIXME: Visit nested-name-specifier.
     return Visit(MakeCursorTemplateRef(Name.getAsTemplateDecl(), Loc, TU));
 
   case TemplateName::OverloadedTemplate:
@@ -1459,11 +1460,6 @@ bool CursorVisitor::VisitTemplateName(TemplateName Name, SourceLocation Loc) {
   case TemplateName::DependentTemplate:
     // FIXME: Visit nested-name-specifier.
     return false;
-
-  case TemplateName::QualifiedTemplate:
-    // FIXME: Visit nested-name-specifier.
-    return Visit(MakeCursorTemplateRef(
-        Name.getAsQualifiedTemplateName()->getTemplateDecl(), Loc, TU));
 
   case TemplateName::SubstTemplateTemplateParm:
     return Visit(MakeCursorTemplateRef(
@@ -9029,7 +9025,9 @@ void clang::setThreadBackgroundPriority() {
     return;
 
 #if LLVM_ENABLE_THREADS
-  llvm::set_thread_priority(llvm::ThreadPriority::Background);
+  // The function name setThreadBackgroundPriority is for historical reasons;
+  // Low is more appropriate.
+  llvm::set_thread_priority(llvm::ThreadPriority::Low);
 #endif
 }
 

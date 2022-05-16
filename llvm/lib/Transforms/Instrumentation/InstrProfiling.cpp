@@ -703,10 +703,9 @@ Value *InstrProfiling::getCounterAddress(InstrProfInstBase *I) {
 
   Type *Int64Ty = Type::getInt64Ty(M->getContext());
   Function *Fn = I->getParent()->getParent();
-  Instruction &EntryI = Fn->getEntryBlock().front();
-  LoadInst *LI = dyn_cast<LoadInst>(&EntryI);
-  if (!LI) {
-    IRBuilder<> EntryBuilder(&EntryI);
+  LoadInst *&BiasLI = FunctionToProfileBiasMap[Fn];
+  if (!BiasLI) {
+    IRBuilder<> EntryBuilder(&Fn->getEntryBlock().front());
     auto *Bias = M->getGlobalVariable(getInstrProfCounterBiasVarName());
     if (!Bias) {
       // Compiler must define this variable when runtime counter relocation
@@ -723,9 +722,9 @@ Value *InstrProfiling::getCounterAddress(InstrProfInstBase *I) {
       if (TT.supportsCOMDAT())
         Bias->setComdat(M->getOrInsertComdat(Bias->getName()));
     }
-    LI = EntryBuilder.CreateLoad(Int64Ty, Bias);
+    BiasLI = EntryBuilder.CreateLoad(Int64Ty, Bias);
   }
-  auto *Add = Builder.CreateAdd(Builder.CreatePtrToInt(Addr, Int64Ty), LI);
+  auto *Add = Builder.CreateAdd(Builder.CreatePtrToInt(Addr, Int64Ty), BiasLI);
   return Builder.CreateIntToPtr(Add, Addr->getType());
 }
 
@@ -855,7 +854,7 @@ static bool needsRuntimeRegistrationOfSectionRange(const Triple &TT) {
   if (TT.isOSDarwin())
     return false;
   // Use linker script magic to get data/cnts/name start/end.
-  if (TT.isOSLinux() || TT.isOSFreeBSD() || TT.isOSNetBSD() ||
+  if (TT.isOSAIX() || TT.isOSLinux() || TT.isOSFreeBSD() || TT.isOSNetBSD() ||
       TT.isOSSolaris() || TT.isOSFuchsia() || TT.isPS4() || TT.isOSWindows())
     return false;
 
