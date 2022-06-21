@@ -635,6 +635,13 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     InputFileList.push_back(II.getFilename());
   }
 
+  // Additional linker set-up and flags for Fortran. This is required in order
+  // to generate executables.
+  if (getToolChain().getDriver().IsFlangMode()) {
+    addFortranRuntimeLibraryPath(getToolChain(), Args, CmdArgs);
+    addFortranRuntimeLibs(getToolChain(), CmdArgs);
+  }
+
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs))
     addOpenMPRuntime(CmdArgs, getToolChain(), Args);
 
@@ -718,7 +725,7 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     if (const Arg *Root = Args.getLastArg(options::OPT_isysroot)) {
       // ld64 fixed the implicit -F and -L paths in ld64-605.1+.
       if (Version.getMajor() < 605 ||
-          (Version.getMajor() == 605 && Version.getMinor().getValueOr(0) < 1)) {
+          (Version.getMajor() == 605 && Version.getMinor().value_or(0) < 1)) {
 
         SmallString<128> L(Root->getValue());
         llvm::sys::path::append(L, "System", "DriverKit", "usr", "lib");
@@ -1337,7 +1344,6 @@ void Darwin::addProfileRTLibs(const ArgList &Args,
       addExportedSymbol(CmdArgs, "___llvm_profile_filename");
       addExportedSymbol(CmdArgs, "___llvm_profile_raw_version");
     }
-    addExportedSymbol(CmdArgs, "_lprofDirMode");
   }
 
   // Align __llvm_prf_{cnts,data} sections to the maximum expected page
@@ -1916,8 +1922,8 @@ std::string getOSVersion(llvm::Triple::OSType OS, const llvm::Triple &Triple,
 
   std::string OSVersion;
   llvm::raw_string_ostream(OSVersion)
-      << OsVersion.getMajor() << '.' << OsVersion.getMinor().getValueOr(0)
-      << '.' << OsVersion.getSubminor().getValueOr(0);
+      << OsVersion.getMajor() << '.' << OsVersion.getMinor().value_or(0) << '.'
+      << OsVersion.getSubminor().value_or(0);
   return OSVersion;
 }
 

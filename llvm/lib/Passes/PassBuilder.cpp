@@ -375,6 +375,17 @@ bool shouldPopulateClassToPassNames() {
          !printAfterPasses().empty();
 }
 
+// A pass for testing -print-on-crash.
+// DO NOT USE THIS EXCEPT FOR TESTING!
+class TriggerCrashPass : public PassInfoMixin<TriggerCrashPass> {
+public:
+  PreservedAnalyses run(Module &, ModuleAnalysisManager &) {
+    abort();
+    return PreservedAnalyses::all();
+  }
+  static StringRef name() { return "TriggerCrashPass"; }
+};
+
 } // namespace
 
 PassBuilder::PassBuilder(TargetMachine *TM, PipelineTuningOptions PTO,
@@ -590,7 +601,7 @@ Expected<bool> parseInlinerPassOptions(StringRef Params) {
 }
 
 Expected<bool> parseCoroSplitPassOptions(StringRef Params) {
-  return parseSinglePassOption(Params, "reuse-storage", "CoroSplitPass");
+  return parseSinglePassOption(Params, "optimizing", "CoroSplitPass");
 }
 
 Expected<bool> parseEarlyCSEPassOptions(StringRef Params) {

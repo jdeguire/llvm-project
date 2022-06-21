@@ -107,6 +107,7 @@ Forums & Mailing Lists
 
 If you can't find what you need in these docs, try consulting the
 Discourse forums. There are also commit mailing lists for all commits to the LLVM Project.
+The :doc:`CodeOfConduct` applies to all these forums and mailing lists.
 
 `LLVM Discourse`__
   The forums for all things LLVM and related sub-projects. There are categories and subcategories for a wide variety of areas within LLVM. You can also view tags or search for a specific topic. 
@@ -140,7 +141,8 @@ Online Sync-Ups
 
 A number of regular calls are organized on specific topics. It should be
 expected that the range of topics will change over time. At the time of
-writing, the following sync-ups are organized:
+writing, the following sync-ups are organized.
+The :doc:`CodeOfConduct` applies to all online sync-ups.
 
 .. list-table:: LLVM regular sync-up calls
    :widths: 25 25 25 25
@@ -172,7 +174,7 @@ writing, the following sync-ups are organized:
      - Monthly, every 3rd Tuesday
      - `ics <https://calendar.google.com/calendar/ical/eoh3m9k1l6vqbd1fkp94fv5q74%40group.calendar.google.com/public/basic.ics>`__
        `gcal <https://calendar.google.com/calendar/embed?src=eoh3m9k1l6vqbd1fkp94fv5q74%40group.calendar.google.com>`__
-     - `Minutes/docs <https://docs.google.com/document/d/1GLCE8cl7goCaLSiM9j1eIq5IqeXt6_YTY2UEcC4jmsg/edit?usp=sharing>`__
+     - `Minutes/docs <https://discourse.llvm.org/t/llvm-security-group-public-sync-ups/62735>`__
    * - `CIRCT <https://github.com/llvm/circt>`__
      - Weekly, on Wednesday
      -
@@ -204,7 +206,7 @@ writing, the following sync-ups are organized:
    * - LLVM Pointer Authentication
      - Every month on Mondays
      - `ics <https://calendar.google.com/calendar/ical/fr1qtmrmt2s9odufjvurkb6j70%40group.calendar.google.com/public/basic.ics>`__
-     - `Minutes/docs <https://docs.google.com/document/d/14IDnh3YY9m6Ej_PaRKOz8tTTZlObgtLl8mYeRbytAec/edit?usp=sharing>`__
+     - `Minutes/docs <https://discourse.llvm.org/t/llvm-pointer-authentication-sync-ups/62661>`__
    * - MemorySSA in LLVM
      - Every 8 weeks on Mondays
      - `ics <https://calendar.google.com/calendar/ical/c_1mincouiltpa24ac14of14lhi4%40group.calendar.google.com/public/basic.ics>`__
@@ -228,6 +230,8 @@ A number of experienced LLVM contributors make themselves available for a chat
 on a regular schedule, to anyone who is looking for some guidance. Please find
 the list of who is available when, through which medium, and what their area of
 expertise is. Don't be too shy to dial in!
+
+The :doc:`CodeOfConduct` applies to all office hours.
 
 Of course, people take time off from time to time, so if you dial in and you
 don't find anyone present, chances are they happen to be off that day.
@@ -281,6 +285,32 @@ don't find anyone present, chances are they happen to be off that day.
     - `GoogleMeet <https://meet.google.com/kdy-fdbv-nuk>`__
     - English, Russian, German (not fluently)
 
+
+Guidance for office hours hosts
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* If you're interested in becoming an office hours host, please add your
+  information to the list above.
+* When starting an office hours session, consider typing something like "*Hi,
+  I'm available for chats in the next half hour at* video chat URL. *I'm
+  looking forward to having conversations on the video chat or here.*" on the
+  LLVM chat channels that you are already on. These could include:
+
+    * the `#office-hours Discord channel
+      <https://discord.com/channels/636084430946959380/976196303681896538>`__.
+    * :ref:`IRC`
+
+  Doing this can help:
+    * overcome potential anxiety to call in for a first time,
+    * people who prefer to first exchange a few messages through text chat
+      before dialing in, and
+    * remind the wider community that office hours do exist.
+* If you decide to no longer host office hours, please do remove your entry
+  from the list above.
+
+
+.. _IRC:
+
 IRC
 ---
 
@@ -333,17 +363,12 @@ can be better.
 .. toctree::
    :hidden:
 
-   CodeOfConduct
    Proposals/GitHubMove
    BugpointRedesign
    Proposals/TestSuite
    Proposals/VariableNames
    Proposals/VectorizationPlan
    Proposals/VectorPredication
-
-:doc:`CodeOfConduct`
-   Proposal to adopt a code of conduct on the LLVM social spaces (lists, events,
-   IRC, etc).
 
 :doc:`Proposals/GitHubMove`
    Proposal to move from SVN/Git to GitHub.

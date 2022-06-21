@@ -1261,18 +1261,6 @@ public:
   /// extended, truncated, or left alone to make it that width.
   APInt zextOrTrunc(unsigned width) const;
 
-  /// Truncate this APInt if necessary to ensure that its bit width is <= \p
-  /// width.
-  APInt truncOrSelf(unsigned width) const;
-
-  /// Sign-extend this APInt if necessary to ensure that its bit width is >= \p
-  /// width.
-  APInt sextOrSelf(unsigned width) const;
-
-  /// Zero-extend this APInt if necessary to ensure that its bit width is >= \p
-  /// width.
-  APInt zextOrSelf(unsigned width) const;
-
   /// @}
   /// \name Bit Manipulation Operators
   /// @{

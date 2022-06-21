@@ -413,9 +413,9 @@ func.func @disallowed_case7_fail() {
 
 // CHECK-LABEL: func @allowed_cases_pass
 func.func @allowed_cases_pass() {
-  // CHECK: test.op_with_bit_enum <read,write>
+  // CHECK: test.op_with_bit_enum <read, write>
   "test.op_with_bit_enum"() {value = #test.bit_enum<read, write>} : () -> ()
-  // CHECK: test.op_with_bit_enum <read,execute>
+  // CHECK: test.op_with_bit_enum <read, execute>
   test.op_with_bit_enum <read,execute>
   return
 }
@@ -424,11 +424,11 @@ func.func @allowed_cases_pass() {
 
 // CHECK-LABEL: func @allowed_cases_pass
 func.func @allowed_cases_pass() {
-  // CHECK: test.op_with_bit_enum_vbar <user|group>
+  // CHECK: test.op_with_bit_enum_vbar <user | group>
   "test.op_with_bit_enum_vbar"() {
     value = #test.bit_enum_vbar<user|group>
   } : () -> ()
-  // CHECK: test.op_with_bit_enum_vbar <user|group|other>
+  // CHECK: test.op_with_bit_enum_vbar <user | group | other>
   test.op_with_bit_enum_vbar <user | group | other>
   return
 }
@@ -639,27 +639,8 @@ func.func @wrong_shape_fail() {
   return
 }
 
-//===----------------------------------------------------------------------===//
-// Test StructAttr
-//===----------------------------------------------------------------------===//
-
-// -----
-
-func.func @missing_fields() {
-  // expected-error @+1 {{failed to satisfy constraint: DictionaryAttr with field(s): 'some_field', 'some_other_field' (each field having its own constraints)}}
-  "test.struct_attr"() {the_struct_attr = {}} : () -> ()
-  return
-}
-
-// -----
-
-func.func @erroneous_fields() {
-  // expected-error @+1 {{failed to satisfy constraint: DictionaryAttr with field(s): 'some_field', 'some_other_field' (each field having its own constraints)}}
-  "test.struct_attr"() {the_struct_attr = {some_field = 1 : i8, some_other_field = 1}} : () -> ()
-  return
-}
-
 // -----
 
 // expected-error @+1 {{invalid dialect namespace '"string with space"'}}
 #invalid_dialect = opaque<"string with space", "0xDEADBEEF"> : tensor<100xi32>
+

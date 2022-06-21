@@ -189,7 +189,7 @@ InFlightDiagnostic Parser::emitWrongTokenError(const Twine &message) {
   StringRef startOfBuffer(bufferStart, curPtr - bufferStart);
 
   // Back up over entirely blank lines.
-  while (1) {
+  while (true) {
     // Back up until we see a \n, but don't look past the buffer start.
     startOfBuffer = startOfBuffer.rtrim(" \t");
 
@@ -275,7 +275,7 @@ ParseResult Parser::parseFloatFromIntegerLiteral(
   }
 
   Optional<uint64_t> value = tok.getUInt64IntegerValue();
-  if (!value.hasValue())
+  if (!value)
     return emitError(loc, "hexadecimal float constant out of range for type");
 
   if (&semantics == &APFloat::IEEEdouble()) {
@@ -776,7 +776,7 @@ ParseResult OperationParser::parseSSAUse(UnresolvedOperand &result,
       return emitError("result number not allowed in argument list");
 
     if (auto value = getToken().getHashIdentifierNumber())
-      result.number = value.getValue();
+      result.number = *value;
     else
       return emitError("invalid SSA value result number");
     consumeToken(Token::hash_identifier);
@@ -949,7 +949,7 @@ ParseResult OperationParser::parseOperation() {
 
         // Check that number of results is > 0.
         auto val = getToken().getUInt64IntegerValue();
-        if (!val.hasValue() || val.getValue() < 1)
+        if (!val || *val < 1)
           return emitError(
               "expected named operation to have at least 1 result");
         consumeToken(Token::integer);
@@ -1691,7 +1691,7 @@ OperationParser::parseCustomOperation(ArrayRef<ResultRecord> resultIDs) {
     Optional<Dialect::ParseOpHook> dialectHook;
     if (Dialect *dialect = opNameInfo->getDialect())
       dialectHook = dialect->getParseOperationHook(opName);
-    if (!dialectHook.hasValue()) {
+    if (!dialectHook) {
       InFlightDiagnostic diag =
           emitError(opLoc) << "custom op '" << originalOpName << "' is unknown";
       if (originalOpName != opName)
@@ -2105,7 +2105,7 @@ ParseResult TopLevelOperationParser::parseAttributeAliasDef() {
 
 /// Parse a type alias declaration.
 ///
-///   type-alias-def ::= '!' alias-name `=` 'type' type
+///   type-alias-def ::= '!' alias-name `=` type
 ///
 ParseResult TopLevelOperationParser::parseTypeAliasDef() {
   assert(getToken().is(Token::exclamation_identifier));
@@ -2119,12 +2119,10 @@ ParseResult TopLevelOperationParser::parseTypeAliasDef() {
   if (aliasName.contains('.'))
     return emitError("type names with a '.' are reserved for "
                      "dialect-defined names");
-
   consumeToken(Token::exclamation_identifier);
 
-  // Parse the '=' and 'type'.
-  if (parseToken(Token::equal, "expected '=' in type alias definition") ||
-      parseToken(Token::kw_type, "expected 'type' in type alias definition"))
+  // Parse the '='.
+  if (parseToken(Token::equal, "expected '=' in type alias definition"))
     return failure();
 
   // Parse the type.
