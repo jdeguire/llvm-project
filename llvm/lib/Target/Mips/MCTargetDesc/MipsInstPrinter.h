@@ -108,9 +108,12 @@ private:
                        raw_ostream &O);
   void printMemOperandEA(const MCInst *MI, int opNum,
                          const MCSubtargetInfo &STI, raw_ostream &O);
-  void printPCPseudoReg(const MCInst *MI, int opNum, raw_ostream &O);
-  void printSPPseudoReg(const MCInst *MI, int opNum, raw_ostream &O);
-  void printRAPseudoReg(const MCInst *MI, int opNum, raw_ostream &O);
+  void printPCPseudoReg(const MCInst *MI, int opNum, 
+                        const MCSubtargetInfo &STI, raw_ostream &O);
+  void printSPPseudoReg(const MCInst *MI, int opNum,
+                        const MCSubtargetInfo &STI, raw_ostream &O);
+  void printRAPseudoReg(const MCInst *MI, int opNum,
+                        const MCSubtargetInfo &STI, raw_ostream &O);
   void printFCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                        raw_ostream &O);
   void printSHFMask(const MCInst *MI, int opNum, raw_ostream &O);
@@ -123,8 +126,8 @@ private:
                   raw_ostream &OS, bool IsBranch = false);
   bool printAlias(const MCInst &MI, uint64_t Address,
                   const MCSubtargetInfo &STI, raw_ostream &OS);
-  void printSaveRestore(const MCInst *MI, const MCSubtargetInfo &STI,
-                        raw_ostream &O);
+  void printSaveRestore(const MCInst *MI, int opNum,
+                        const MCSubtargetInfo &STI, raw_ostream &O);
   void printRegisterList(const MCInst *MI, int opNum,
                          const MCSubtargetInfo &STI, raw_ostream &O);
 };

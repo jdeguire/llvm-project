@@ -745,14 +745,14 @@ initializeFunctionInfo(const std::vector<MachineInstr*> &CPEMIs) {
           switch (Opc) {
           default:
             llvm_unreachable("Unknown addressing mode for CP reference!");
-          case Mips::LwRxPcTcp16:
+          case Mips::LwRxPcImm16:
             Bits = 8;
             Scale = 4;
-            LongFormOpcode = Mips::LwRxPcTcpX16;
+            LongFormOpcode = Mips::LwRxPcImmX16;
             LongFormBits = 14;
             LongFormScale = 1;
             break;
-          case Mips::LwRxPcTcpX16:
+          case Mips::LwRxPcImmX16:
             Bits = 14;
             Scale = 1;
             NegOk = true;
@@ -1652,7 +1652,7 @@ void MipsConstantIslands::prescanForConstants() {
             unsigned index = MCP->getConstantPoolIndex(C, Align(4));
             I->getOperand(2).ChangeToImmediate(index);
             LLVM_DEBUG(dbgs() << "constant island constant " << *I << "\n");
-            I->setDesc(TII->get(Mips::LwRxPcTcp16));
+            I->setDesc(TII->get(Mips::LwRxPcImm16));
             I->removeOperand(1);
             I->removeOperand(1);
             I->addOperand(MachineOperand::CreateCPI(index, 0));

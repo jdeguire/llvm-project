@@ -86,6 +86,7 @@ void MipsInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     O << "\t.set\tpush\n";
     O << "\t.set\tmips32r2\n";
     break;
+#if 0
   case Mips::Save16:
     O << "\tsave\t";
     printSaveRestore(MI, STI, O);
@@ -106,6 +107,7 @@ void MipsInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     printSaveRestore(MI, STI, O);
     O << "\n";
     return;
+#endif
   }
 
   // Try to print any aliases first.
@@ -227,20 +229,23 @@ void MipsInstPrinter::printMemOperandEA(const MCInst *MI, int opNum,
   printOperand(MI, opNum + 1, STI, O);
 }
 
-void MipsInstPrinter::
-printPCPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+void MipsInstPrinter::printPCPseudoReg(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo & /* STI */,
+                                       raw_ostream &O) {
   // Not a real operand; instead indicates a PC-realtive MIPS16 instruction.
   O << "$pc";
 }
 
-void MipsInstPrinter::
-printSPPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+void MipsInstPrinter::printSPPseudoReg(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo & /* STI */,
+                                       raw_ostream &O) {
   // Not a real operand; instead indicates an SP-realtive MIPS16 instruction.
   O << "$sp";
 }
 
-void MipsInstPrinter::
-printRAPseudoReg(const MCInst *MI, int opNum, raw_ostream &O) {
+void MipsInstPrinter::printRAPseudoReg(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo & /* STI */,
+                                       raw_ostream &O) {
   // Not a real operand; instead indicates the MIPS16 instruction accesses RA.
   O << "$ra";
 }
@@ -353,11 +358,11 @@ bool MipsInstPrinter::printAlias(const MCInst &MI, uint64_t Address,
   }
 }
 
-void MipsInstPrinter::printSaveRestore(const MCInst *MI,
+void MipsInstPrinter::printSaveRestore(const MCInst *MI, int opNum,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    if (i != 0) O << ", ";
+  for (int i = opNum, e = MI->getNumOperands(); i != e; ++i) {
+    if (i != opNum) O << ", ";
     if (MI->getOperand(i).isReg())
       printRegName(O, MI->getOperand(i).getReg());
     else

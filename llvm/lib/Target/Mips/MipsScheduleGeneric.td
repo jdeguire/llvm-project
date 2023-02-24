@@ -634,14 +634,20 @@ def : InstRW<[GenericWriteCache], (instrs CACHEE_MM)>;
 // =======
 
 def : InstRW<[GenericWriteLoad], (instrs Restore16, RestoreX16,
-                                  LbRxRyOffMemX16,
-                                  LbuRxRyOffMemX16, LhRxRyOffMemX16,
-                                  LhuRxRyOffMemX16, LwRxRyOffMemX16,
-                                  LwRxSpImmX16, LwRxPcTcp16, LwRxPcTcpX16)>;
+                                  LbRxRyOffMem16, LbRxRyOffMemX16,
+                                  LbuRxRyOffMem16, LbuRxRyOffMemX16,
+                                  LhRxRyOffMem16, LhRxRyOffMemX16,
+                                  LhuRxRyOffMem16, LhuRxRyOffMemX16,
+                                  LwRxRyOffMem16, LwRxRyOffMemX16,
+                                  LwRxSpImm16, LwRxSpImmX16, 
+                                  LwRxPcImm16, LwRxPcImmX16)>;
 
-def : InstRW<[GenericWriteStore], (instrs Save16, SaveX16, SbRxRyOffMemX16,
-                                   ShRxRyOffMemX16, SwRxRyOffMemX16,
-                                   SwRxSpImmX16)>;
+def : InstRW<[GenericWriteStore], (instrs Save16, SaveX16, 
+                                   SbRxRyOffMem16, SbRxRyOffMemX16,
+                                   ShRxRyOffMem16, ShRxRyOffMemX16,
+                                   SwRxRyOffMem16, SwRxRyOffMemX16,
+                                   SwRxSpImm16, SwRxSpImmX16,
+                                   SwRaSpImm16, SwRaSpImmX16)>;
 
 // microMIPS
 // =========

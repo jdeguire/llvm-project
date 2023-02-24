@@ -785,6 +785,112 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
   return getExprOpValue(MO.getExpr(),Fixups, STI);
 }
 
+/// Return binary encoding of MIPS16 save and restore operands.
+unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  union {
+    struct {
+      unsigned framesize:8;
+      unsigned s1:1;
+      unsigned s0:1;
+      unsigned ra:1;
+      unsigned aregs:4;
+      unsigned xsregs:3;
+    } bits;
+    unsigned val;
+  } Encoding;
+
+  Encoding.val = 0;
+
+  // The number of caller-saved regs for 'aregs' and 'xsregs' is determined by
+  // the largest register number in the list. That is [$4-7] for 'aregs' and
+  // [$18-23, $30] for 'xsregs'. All other regs below those are implicitly
+  // handled. For example, reg $6 would also handle regs $4 and $5 even if they
+  // were not called out in the assembly code.
+  // This is similar for the callee-saved registers for 'aregs', but the count
+  // is determined by the smallest register number. For example, if only reg $4
+  // were specified, then the other three argument regs would be handled. The
+  // MIPS16 documentation calls these "static" registers.
+  unsigned NumAregArgs = 0;
+  unsigned NumAregStatics = 0;
+  unsigned NumXsRegs = 0;
+
+  // Get caller-saved regs.
+  while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
+    switch(MI.getOperand(OpNo).getReg()) {
+    default:
+    {
+      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
+      if(NumXsRegs < (RegIdx - 17))
+        NumXsRegs = RegIdx - 17;
+      break;
+    }
+    case Mips::A0:
+    case Mips::A0_64:
+      if(NumAregArgs < 1)
+        NumAregArgs = 1;
+      break;
+    case Mips::A1:
+    case Mips::A1_64:
+      if(NumAregArgs < 2)
+        NumAregArgs = 2;
+      break;
+    case Mips::A2:
+    case Mips::A2_64:
+      if(NumAregArgs < 3)
+        NumAregArgs = 3;
+      break;
+    case Mips::A3:
+    case Mips::A3_64:
+      NumAregArgs = 4;
+      break;
+    case Mips::S0:
+    case Mips::S0_64:
+      Encoding.bits.s0 = 1;
+      break;
+    case Mips::S1:
+    case Mips::S1_64:
+      Encoding.bits.s1 = 1;
+      break;
+    case Mips::FP:
+    case Mips::FP_64:
+      NumXsRegs = 7;
+      break;
+    case Mips::RA:
+    case Mips::RA_64:
+      Encoding.bits.ra = 1;
+      break;
+    }
+
+    ++OpNo;
+  }
+
+  // Instruction multiplies framesize value by 8.
+  Encoding.bits.framesize = MI.getOperand(OpNo).getImm() >> 3;
+
+  // Get callee-saved regs.
+  while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
+      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
+      if(NumAregStatics < (8 - RegIdx))
+        NumAregStatics = 8 - RegIdx;
+  }
+
+  // Determine 'aregs' encoding. There are two special cases for when all
+  // four argument regs are used.
+  if (NumAregStatics == 4) {
+    Encoding.bits.aregs = 0b1011;
+  } else if (NumAregArgs == 4) {
+    Encoding.bits.aregs = 0b1110;
+  } else {
+    Encoding.bits.aregs = (NumAregArgs << 2) | NumAregStatics;
+  }
+
+  Encoding.bits.xsregs = NumXsRegs;
+
+  return Encoding.val;
+}
+
 /// Return binary encoding of memory related operand.
 /// If the offset operand requires relocation, record the relocation.
 template <unsigned ShiftAmount>

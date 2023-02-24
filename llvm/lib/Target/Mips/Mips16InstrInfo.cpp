@@ -471,6 +471,7 @@ const MipsInstrInfo *llvm::createMips16InstrInfo(const MipsSubtarget &STI) {
 
 bool Mips16InstrInfo::validImmediate(unsigned Opcode, unsigned Reg,
                                      int64_t Amount) {
+#warning TODO: Do the non-X short versions of the instructions need to be added here?
   switch (Opcode) {
   case Mips::LbRxRyOffMemX16:
   case Mips::LbuRxRyOffMemX16:
