@@ -2064,7 +2064,7 @@ def LONG_BRANCH_ADDiu2Op : PseudoSE<(outs GPR32Opnd:$dst),
 //===----------------------------------------------------------------------===//
 
 /// Arithmetic Instructions (ALU Immediate)
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   def ADDiu : MMRel, StdMMR6Rel, ArithLogicI<"addiu", simm16_relaxed, GPR32Opnd,
                                              II_ADDIU, imm32SExt16, add>,
               ADDI_FM<0x9>, IsAsCheapAsAMove, ISA_MIPS1;
@@ -2117,7 +2117,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
               ISA_MIPS1;
 }
 
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   /// Shift Instructions
   def SLL  : MMRel, shift_rotate_imm<"sll", uimm5, GPR32Opnd, II_SLL, shl,
                                      immZExt5>, SRA_FM<0, 0>, ISA_MIPS1;
@@ -2142,7 +2142,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
 
 /// Load and Store Instructions
 ///  aligned
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   def LB  : LoadMemory<"lb", GPR32Opnd, mem_simmptr, sextloadi8, II_LB>, MMRel,
             LW_FM<0x20>, ISA_MIPS1;
   def LBu : LoadMemory<"lbu", GPR32Opnd, mem_simmptr, zextloadi8, II_LBU,
@@ -2254,11 +2254,11 @@ def LL : LLBase<"ll", GPR32Opnd>, LW_FM<0x30>, PTR_32, ISA_MIPS2_NOT_32R6_64R6;
 def SC : SCBase<"sc", GPR32Opnd>, LW_FM<0x38>, PTR_32, ISA_MIPS2_NOT_32R6_64R6;
 }
 /// Jump and Branch Instructions
-let AdditionalPredicates = [NotInMicroMips, RelocNotPIC] in
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode, RelocNotPIC] in
 def J       : MMRel, JumpFJ<jmptarget, "j", br, bb, "j">, FJ<2>,
               IsBranch, ISA_MIPS1;
 
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
 def JR      : MMRel, IndirectBranch<"jr", GPR32Opnd>, MTLO_FM<8>,
               ISA_MIPS1_NOT_32R6_64R6;
 def BEQ     : MMRel, CBranch<"beq", brtarget, seteq, GPR32Opnd>, BEQ_FM<4>,
@@ -2291,7 +2291,8 @@ def JAL  : MMRel, JumpLink<"jal", calltarget>, FJ<3>, ISA_MIPS1;
 
 }
 
-let AdditionalPredicates = [NotInMicroMips, NoIndirectJumpGuards] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode,
+                            NoIndirectJumpGuards] in {
   def JALR : JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM, ISA_MIPS1;
   def JALRPseudo : JumpLinkRegPseudo<GPR32Opnd, JALR, RA>, ISA_MIPS1;
 }
@@ -2375,7 +2376,7 @@ let Uses = [V0, V1], isTerminator = 1, isReturn = 1,
 }
 
 /// Multiply and Divide Instructions.
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   def MULT  : MMRel, Mult<"mult", II_MULT, GPR32Opnd, [HI0, LO0]>,
               MULT_FM<0, 0x18>, ISA_MIPS1_NOT_32R6_64R6;
   def MULTu : MMRel, Mult<"multu", II_MULTU, GPR32Opnd, [HI0, LO0]>,
@@ -2479,7 +2480,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
 
 class Barrier<string asmstr, InstrItinClass itin = NoItinerary> :
   InstSE<(outs), (ins), asmstr, [], itin, FrmOther, asmstr>;
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   def SSNOP : MMRel, StdMMR6Rel, Barrier<"ssnop", II_SSNOP>, BARRIER_FM<1>,
               ISA_MIPS1;
   def EHB : MMRel, Barrier<"ehb", II_EHB>, BARRIER_FM<3>, ISA_MIPS1;
@@ -2914,12 +2915,14 @@ def : MipsInstAlias<"sub, $rd, $rs, $imm",
 def : MipsInstAlias<"sub $rs, $imm",
                     (ADDi GPR32Opnd:$rs, GPR32Opnd:$rs, InvertedImOperand:$imm),
                     0>, ISA_MIPS1_NOT_32R6_64R6;
-def : MipsInstAlias<"subu, $rd, $rs, $imm",
-                    (ADDiu GPR32Opnd:$rd, GPR32Opnd:$rs,
-                           InvertedImOperand:$imm), 0>;
-def : MipsInstAlias<"subu $rs, $imm", (ADDiu GPR32Opnd:$rs, GPR32Opnd:$rs,
-                                             InvertedImOperand:$imm), 0>;
-let AdditionalPredicates = [NotInMicroMips] in {
+let AdditionalPredicates = [NotInMips16Mode] in {
+  def : MipsInstAlias<"subu, $rd, $rs, $imm",
+                      (ADDiu GPR32Opnd:$rd, GPR32Opnd:$rs,
+                            InvertedImOperand:$imm), 0>;
+  def : MipsInstAlias<"subu $rs, $imm", (ADDiu GPR32Opnd:$rs, GPR32Opnd:$rs,
+                                              InvertedImOperand:$imm), 0>;
+}
+let AdditionalPredicates = [NotInMicroMips, NotInMips16Mode] in {
   def : MipsInstAlias<"sll $rd, $rt, $rs",
                       (SLLV GPR32Opnd:$rd, GPR32Opnd:$rt, GPR32Opnd:$rs), 0>;
   def : MipsInstAlias<"sra $rd, $rt, $rs",

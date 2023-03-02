@@ -559,7 +559,7 @@ class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
 // I8_MOVR32 instruction format (used only by the MOVR32 instructio
 //
 class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
-       FI8_MOVR3216<(outs CPU16Opnd:$rz), (ins GPR32:$r32),
+       FI8_MOVR3216<(outs CPU16Opnd:$rz), (ins GPR32Opnd:$r32),
        !strconcat(asmstr,  "\t$rz, $r32"), [], itin>;
 
 //
@@ -567,20 +567,19 @@ class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
 //
 
 class FI8_MOV32R16_ins<string asmstr, InstrItinClass itin>:
-  FI8_MOV32R16<(outs GPR32:$r32), (ins CPU16Opnd:$rz),
+  FI8_MOV32R16<(outs GPR32Opnd:$r32), (ins CPU16Opnd:$rz),
                !strconcat(asmstr,  "\t$r32, $rz"), [], itin>;
 
 //
-// This are pseudo formats for multiply
-// This first one can be changed to non-pseudo now.
-//
 // MULT
 //
-class FMULT16_ins<string asmstr> :
-  MipsPseudo16<(outs), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
-               !strconcat(asmstr, "\t$rx, $ry"), []>;
+class FMULT16_ins<bits<5> _funct, string asmstr, InstrItinClass itin> :
+  FRR16<_funct, (outs), (ins CPU16Opnd: $rx, CPU16Opnd: $ry),
+        !strconcat(asmstr, "\t$rx, $ry"), [], itin>;
+//  MipsPseudo16<(outs), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
+//               !strconcat(asmstr, "\t$rx, $ry"), []>;
 
-//
+// Pseudo format for multiply
 // MULT-LO
 //
 class FMULT16_LO_ins<string asmstr> :
@@ -1330,26 +1329,12 @@ def Mflo16: FRR16_M_ins<0b10010, "mflo", IIM16Alu> {
 }
 
 //
-// Pseudo Instruction for mult
-//
-def MultRxRy16:  FMULT16_ins<"mult"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
-}
-
-def MultuRxRy16: FMULT16_ins<"multu"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
-}
-
-//
 // Format: MULT rx, ry MIPS16e
 // Purpose: Multiply Word
 // To multiply 32-bit signed integers.
 //
-def MultRxRyRz16: FMULT16_LO_ins<"mult"> {
+//def MultRxRy16:  FMULT16_ins<"mult"> {
+def MultRxRy16:  FMULT16_ins<0b11000, "mult", IIM16Alu> {
   let isCommutable = 1;
   let hasSideEffects = 0;
   let Defs = [HI0, LO0];
@@ -1359,6 +1344,25 @@ def MultRxRyRz16: FMULT16_LO_ins<"mult"> {
 // Format: MULTU rx, ry MIPS16e
 // Purpose: Multiply Unsigned Word
 // To multiply 32-bit unsigned integers.
+//
+//def MultuRxRy16: FMULT16_ins<"multu"> {
+def MultuRxRy16: FMULT16_ins<0b11001, "multu", IIM16Alu> {
+  let isCommutable = 1;
+  let hasSideEffects = 0;
+  let Defs = [HI0, LO0];
+}
+
+//
+// Pseudo Instruction for mult
+//
+def MultRxRyRz16: FMULT16_LO_ins<"mult"> {
+  let isCommutable = 1;
+  let hasSideEffects = 0;
+  let Defs = [HI0, LO0];
+}
+
+//
+// Pseudo Instruction for multu
 //
 def MultuRxRyRz16: FMULT16_LO_ins<"multu"> {
   let isCommutable = 1;
@@ -1450,6 +1454,12 @@ def SbRxRyOffMem16: FRRI16_memstore_ins<0b11000, "sb", mem16_lsl0, II_SB>, MaySt
 //
 def SbRxRyOffMemX16:
   FEXT_RRI16_memstore_ins<0b11000, "sb", mem16ext, II_SB>, MayStore;
+
+//
+// Format: SDBBP immediate
+// Purpose: Software Debug Breakpoint
+// To cause a debug breakpoint exception.
+def Sdbbp16: FC16_ins<0b00001, "sdbbp", IIM16Alu>;
 
 //
 // Format: SEB rx MIPS16e
@@ -1783,6 +1793,23 @@ def SwRaSpImmX16: FEXT_I816_RA_mem_ins<0b010, "sw", mem16ext_sp, II_SW>, MayStor
 // To do a bitwise logical XOR.
 //
 def XorRxRxRy16: FRxRxRy16_ins<0b01110, "xor", IIM16Alu>, ArithLogic16Defs<1>;
+
+//
+// Format: ZEB rx MIPS16e
+// Purpose: Zero-Extend Byte
+// Zero-extend least significant byte in register rx.
+//
+def ZebRx16
+  : FRR_SF16_ins<0b10001, 0b000, "zeb", IIM16Alu>;
+
+//
+// Format: ZEH rx MIPS16e
+// Purpose: Zero-Extend Halfword
+// Zero-extend least significant word in register rx.
+//
+def ZehRx16
+  : FRR_SF16_ins<0b10001, 0b001, "zeh", IIM16Alu>;
+
 
 class Mips16Pat<dag pattern, dag result> : Pat<pattern, result> {
   let Predicates = [InMips16Mode];
@@ -2398,6 +2425,7 @@ MipsPseudo16<(outs), (ins cpinst_operand:$instid, cpinst_operand:$cpidx,
 
 let EncodingPredicates = [InMips16Mode] in {
   def : MipsInstAlias<"break", (Break16 0)>;
+  def : MipsInstAlias<"sdbbp", (Sdbbp16 0)>;
   def : MipsInstAlias<"nop", (Move32R16 ZERO, S0)>;
   def : MipsInstAlias<"div $rs, $rt",
                       (DivRxRy16 CPU16Opnd:$rs, CPU16Opnd:$rt)>;

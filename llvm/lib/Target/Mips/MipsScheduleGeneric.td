@@ -77,7 +77,7 @@ def : InstRW<[GenericWriteALU], (instrs AddiuRxImmX16, AddiuRxRxImm16,
                                  SltiuCCRxImmX16, SltRxRy16, SltCCRxRy16,
                                  SltuRxRy16, SltuRxRyRz16, SltuCCRxRy16,
                                  SravRxRy16, SraX16, SrlvRxRy16, SrlX16,
-                                 SubuRxRyRz16, XorRxRxRy16)>;
+                                 SubuRxRyRz16, XorRxRxRy16, ZebRx16, ZehRx16)>;
 
 def : InstRW<[GenericWriteALU], (instrs Constant32, LwConstant32,
                                  GotPrologue16, CONSTPOOL_ENTRY)>;
@@ -342,7 +342,7 @@ def : InstRW<[GenericWriteJump], (instrs Bimm16, BimmX16, BeqzRxImm16,
 def : InstRW<[GenericWriteJumpAndLink], (instrs Jal16, JalB16, Jal16imm,
                                          JalrRaRx16, JalrcRaRx16, Jalx16)>;
 
-def : InstRW<[GenericWriteTrap], (instrs Break16)>;
+def : InstRW<[GenericWriteTrap], (instrs Break16, Sdbbp16)>;
 
 def : InstRW<[GenericWriteALULong], (instrs SelBeqZ, SelTBteqZCmp,
                                      SelTBteqZCmpi, SelTBteqZSlt,

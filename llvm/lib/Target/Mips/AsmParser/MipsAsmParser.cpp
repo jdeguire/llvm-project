@@ -6605,9 +6605,10 @@ bool MipsAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
   // If there wasn't a custom match, try the generic matcher below. Otherwise,
   // there was a match, but an error occurred, in which case, just return that
   // the operand parsing failed.
-  if (ResTy == MatchOperand_ParseFail)
+  if (ResTy == MatchOperand_ParseFail) {
+    LLVM_DEBUG(dbgs() << "parseFail\n");
     return true;
-
+  }
   LLVM_DEBUG(dbgs() << ".. Generic Parser\n");
 
   switch (getLexer().getKind()) {
@@ -7276,7 +7277,7 @@ bool MipsAsmParser::parseParenSuffix(StringRef Name, OperandVector &Operands) {
     Parser.Lex();
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list");
+      return Error(Loc, "unexpected token in argument list (1)");
     }
     if (Parser.getTok().isNot(AsmToken::RParen)) {
       SMLoc Loc = getLexer().getLoc();
@@ -7304,7 +7305,7 @@ bool MipsAsmParser::parseBracketSuffix(StringRef Name,
     Parser.Lex();
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list");
+      return Error(Loc, "unexpected token in argument list (2)");
     }
     if (Parser.getTok().isNot(AsmToken::RBrac)) {
       SMLoc Loc = getLexer().getLoc();
@@ -7342,7 +7343,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
     // Read the first operand.
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list");
+      return Error(Loc, "unexpected token in argument list (3)");
     }
     if (getLexer().is(AsmToken::LBrac) && parseBracketSuffix(Name, Operands))
       return true;
@@ -7353,7 +7354,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       // Parse and remember the operand.
       if (parseOperand(Operands, Name)) {
         SMLoc Loc = getLexer().getLoc();
-        return Error(Loc, "unexpected token in argument list");
+        return Error(Loc, "unexpected token in argument list (4)");
       }
       // Parse bracket and parenthesis suffixes before we iterate
       if (getLexer().is(AsmToken::LBrac)) {
@@ -7366,7 +7367,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
   }
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     SMLoc Loc = getLexer().getLoc();
-    return Error(Loc, "unexpected token in argument list");
+    return Error(Loc, "unexpected token in argument list (5)");
   }
   Parser.Lex(); // Consume the EndOfStatement.
   return false;
