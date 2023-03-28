@@ -156,6 +156,7 @@ bool Mips16InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 /// GetOppositeBranchOpc - Return the inverse of the specified
 /// opcode, e.g. turning BEQ to BNE.
 unsigned Mips16InstrInfo::getOppositeBranchOpc(unsigned Opc) const {
+#warning TODO: This table probably needs updating.
   switch (Opc) {
   case Mips::BeqzRxImmX16: return Mips::BnezRxImmX16;
   case Mips::BnezRxImmX16: return Mips::BeqzRxImmX16;

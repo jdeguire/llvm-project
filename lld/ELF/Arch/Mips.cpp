@@ -152,6 +152,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_PC26_S2:
   case R_MIPS_PCHI16:
   case R_MIPS_PCLO16:
+  case R_MIPS16_PC16_S1:
   case R_MICROMIPS_PC7_S1:
   case R_MICROMIPS_PC10_S1:
   case R_MICROMIPS_PC16_S1:
@@ -224,6 +225,21 @@ template <endianness E> static uint32_t readShuffle(const uint8_t *loc) {
   return v;
 }
 
+static uint32_t readMips16ExtendValue(const uint8_t *loc) {
+  // MIPS16 extended instructions are stored like two 16-bit instructions:
+  // an EXTEND instruction followed by the 16-bit instruction whose 
+  // immediate is to be extended. Handle this with two 16-bit reads.
+  // This will return only the immediate value, not the whole instruction.
+  uint16_t ext = read16(loc);
+  uint16_t ins = read16(loc+2);
+
+  uint32_t val = ins & 0x1F;
+  val |= (ext & 0x07E0);
+  val |= (ext & 0x1F) << 10;
+
+  return val;
+}
+
 static void writeValue(uint8_t *loc, uint64_t v, uint8_t bitsSize,
                        uint8_t shift) {
   uint32_t instr = read32(loc);
@@ -244,6 +260,19 @@ static void writeShuffleValue(uint8_t *loc, uint64_t v, uint8_t bitsSize,
 
   if (E == support::little)
     std::swap(words[0], words[1]);
+}
+
+static void writeMips16ExtendValue(uint8_t *loc, uint64_t v) {
+  // See readMips16ExtendValue for more info.
+  uint16_t ext = read16(loc) & 0xF800;
+  uint16_t ins = read16(loc+2) & 0xFFE0;
+
+  ext |= (v & 0x07E0);
+  ext |= (v & 0xF800) >> 11;
+  write16(loc, ext);
+
+  ins |= (v & 0x1f);
+  write16(loc+2, ins);
 }
 
 template <endianness E>
@@ -471,6 +500,8 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
   case R_MIPS_JALR:
     // These relocations are defined as not having an implicit addend.
     return 0;
+  case R_MIPS16_PC16_S1:
+    return SignExtend64<17>(readMips16ExtendValue(buf) << 1);
   default:
     internalLinkerError(getErrorLocation(buf),
                         "cannot read addend for relocation " + toString(type));
@@ -510,21 +541,22 @@ static bool isBranchReloc(RelType type) {
          type == R_MIPS_PC21_S2 || type == R_MIPS_PC16;
 }
 
-static bool isMicroBranchReloc(RelType type) {
+static bool isCompressedBranchReloc(RelType type) {
   return type == R_MICROMIPS_26_S1 || type == R_MICROMIPS_PC16_S1 ||
-         type == R_MICROMIPS_PC10_S1 || type == R_MICROMIPS_PC7_S1;
+         type == R_MICROMIPS_PC10_S1 || type == R_MICROMIPS_PC7_S1 ||
+         type == R_MIPS16_26;
 }
 
 template <class ELFT>
 static uint64_t fixupCrossModeJump(uint8_t *loc, RelType type, uint64_t val) {
   // Here we need to detect jump/branch from regular MIPS code
-  // to a microMIPS target and vice versa. In that cases jump
-  // instructions need to be replaced by their "cross-mode"
+  // to a microMIPS/MIPS16 target and vice versa. In those cases
+  // jump instructions need to be replaced by their "cross-mode"
   // equivalents.
   const endianness e = ELFT::TargetEndianness;
-  bool isMicroTgt = val & 0x1;
-  bool isCrossJump = (isMicroTgt && isBranchReloc(type)) ||
-                     (!isMicroTgt && isMicroBranchReloc(type));
+  bool isCompressedTgt = val & 0x1;
+  bool isCrossJump = (isCompressedTgt && isBranchReloc(type)) ||
+                     (!isCompressedTgt && isCompressedBranchReloc(type));
   if (!isCrossJump)
     return val;
 
@@ -546,9 +578,21 @@ static uint64_t fixupCrossModeJump(uint8_t *loc, RelType type, uint64_t val) {
     }
     break;
   }
+  case R_MIPS16_26: {
+    // Like extended instructions, in MIPS16 the JAL(X) instruction is stored
+    // as two 16-bit values rather than a single 32-bit value.
+    uint16_t inst = read16(loc);
+    if ((inst & 0xF800) == 0x1800) { // JAL(X)
+      write16(loc, inst | 0x0200);   // select JALX vs JAL
+      return val;
+    }
+    break;
+  }
+  }
   case R_MIPS_PC26_S2:
   case R_MIPS_PC21_S2:
   case R_MIPS_PC16:
+  case R_MIPS16_PC16_S1:
   case R_MICROMIPS_PC16_S1:
   case R_MICROMIPS_PC10_S1:
   case R_MICROMIPS_PC7_S1:
@@ -749,6 +793,10 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MICROMIPS_PC23_S2:
     checkInt(loc, val, 25, rel);
     writeShuffleValue<e>(loc, val, 23, 2);
+    break;
+  case R_MIPS16_PC16_S1:
+    checkInt(loc, val, 17, rel);
+    writeMips16ExtendValue(loc, val >> 1);
     break;
   default:
     llvm_unreachable("unknown relocation");

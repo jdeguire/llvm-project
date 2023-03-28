@@ -290,6 +290,7 @@ MipsInstrInfo::BranchType MipsInstrInfo::analyzeBranch(
 
 bool MipsInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                           int64_t BrOffset) const {
+#warning TODO: Does this need updating with MIPS16 branches?
   switch (BranchOpc) {
   case Mips::B:
   case Mips::BAL:

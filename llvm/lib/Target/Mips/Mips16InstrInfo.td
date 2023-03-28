@@ -237,13 +237,38 @@ def svrs16 : svrsBase {
 
 def mem16_ea : Operand<i32> {
   let PrintMethod = "printMemOperandEA";
-  let MIOperandInfo = (ops CPU16OpndPlusSP, simm16);
+  let MIOperandInfo = (ops CPU16OpndPlusSP, simm15);
   let EncoderMethod = "getMemEncoding";
 }
 
 // TODO: Will this still be needed later?
 def pcrel16 : Operand<i32>;
 
+def brtarget16_mips16 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTarget16OpValueMips16";
+  let OperandType   = "OPERAND_PCREL";
+  let DecoderMethod = "DecodeBranchTarget16Mips16";
+  let ParserMatchClass = MipsJumpTargetAsmOperand;
+  let PrintMethod = "printBranchOperand";
+}
+
+// This ensures that the compact branch is tried first by being a subclass of
+// MipsJumpTargetAsmOperand. It also requires a constant immediate because
+// there is no fixup available for the compact branch.
+def Mips16JumpTarget11AsmOperand : AsmOperandClass {
+  let SuperClasses = [MipsJumpTargetAsmOperand];
+  let Name = "JumpTarget11";
+  let ParserMethod = "parseJumpTarget";
+  let PredicateMethod = "isConstantImm";
+  let RenderMethod = "addImmOperands";
+}
+def brtarget11_mips16 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTarget11OpValueMips16";
+  let OperandType   = "OPERAND_PCREL";
+  let DecoderMethod = "DecodeBranchTarget11Mips16";
+  let ParserMatchClass = Mips16JumpTarget11AsmOperand;
+  let PrintMethod = "printBranchOperand";
+}
 
 //
 // I-type instruction format
@@ -251,9 +276,10 @@ def pcrel16 : Operand<i32>;
 // this is only used by bimm. the actual assembly value is a 12 bit signed
 // number
 //
+// TODO Remove the simm11_lsl1 type from wherever it's defined if it's no longer used.
 class FI16_ins<bits<5> op, string asmstr, InstrItinClass itin>:
-  FI16<op, (outs), (ins brtarget:$imm16),
-            !strconcat(asmstr, "\t$imm16 # 16 bit inst"), [], itin>;
+  FI16<op, (outs), (ins brtarget11_mips16:$imm11),
+            !strconcat(asmstr, "\t$imm11"), [], itin>;
 
 //
 //
@@ -265,63 +291,65 @@ class FI816_ins_base<bits<3> _func, string asmstr,
   FI816<_func, (outs), (ins simm16:$imm), !strconcat(asmstr, asmstr2),
         [], itin>;
 
-class FI816_ins<bits<3> _func, string asmstr,
-                InstrItinClass itin>:
-  FI816_ins_base<_func, asmstr, "\t$imm # 16 bit inst", itin>;
+class FI816_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
+  FI816_ins_base<_func, asmstr, "\t$imm", itin>;
 
-class FI816_SP_ins<bits<3> _func, string asmstr,
-                   InstrItinClass itin>:
+class FI816_SP_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
   FI816<_func, (outs), (ins SPPseudoReg:$pseudo, simm8_lsl3:$imm8),
-        !strconcat(asmstr, "\t$pseudo, $imm8 # 16 bit inst"), [], itin>;
-//  FI816_ins_base<_func, asmstr, "\t$$sp, $imm # 16 bit inst", itin>;
+        !strconcat(asmstr, "\t$pseudo, $imm8"), [], itin>;
+//  FI816_ins_base<_func, asmstr, "\t$$sp, $imm", itin>;
 
 class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd, 
                    InstrItinClass itin>:
   FI816<_func, (outs), (ins RAPseudoReg:$pseudo, MemOpnd:$addr),
-        !strconcat(asmstr, "\t$pseudo, $addr # 16 bit inst"), [], itin>;
+        !strconcat(asmstr, "\t$pseudo, $addr"), [], itin>;
 
 //
 // RI instruction format
 //
 
-class FRI16_ins_base<bits<5> op, string asmstr, string asmstr2,
-                     InstrItinClass itin>:
-  FRI16<op, (outs CPU16Opnd:$rx), (ins simm16:$imm),
-        !strconcat(asmstr, asmstr2), [], itin>;
+//class FRI16_ins_base<bits<5> op, string asmstr, string asmstr2,
+//                     InstrItinClass itin>:
+//  FRI16<op, (outs CPU16Opnd:$rx), (ins simm16:$imm),
+//        !strconcat(asmstr, asmstr2), [], itin>;
 
-class FRI16_ins<bits<5> op, string asmstr,
-                InstrItinClass itin>:
-  FRI16_ins_base<op, asmstr, "\t$rx, $imm \t# 16 bit inst", itin>;
+class FRI16_ins<bits<5> op, string asmstr, InstrItinClass itin>:
+  FRI16<op, (outs CPU16Opnd:$rx), (ins simm8:$imm),
+        !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
+//  FRI16_ins_base<op, asmstr, "\t$rx, $imm", itin>;
 
-class FRI16_TCP_ins<bits<5> _op, string asmstr,
-                    InstrItinClass itin>:
+class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm, i32imm:$size),
-            !strconcat(asmstr, "\t$rx, $imm\t# 16 bit inst"), [], itin>;
+            !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
 
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
   FRI16<op, (outs), (ins CPU16Opnd:$rx, simm16:$imm),
         !strconcat(asmstr, asmstr2), [], itin>;
 
-class FRI16R_ins<bits<5> op, string asmstr,
-                InstrItinClass itin>:
-  FRI16R_ins_base<op, asmstr, "\t$rx, $imm \t# 16 bit inst", itin>;
+class FRI16R_ins<bits<5> op, string asmstr, InstrItinClass itin>:
+  FRI16R_ins_base<op, asmstr, "\t$rx, $imm", itin>;
 
-class F2RI16_ins<bits<5> _op, string asmstr,
-                     InstrItinClass itin>:
+class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm),
-        !strconcat(asmstr, "\t$rx, $imm\t# 16 bit inst"), [], itin> {
+        !strconcat(asmstr, "\t$rx, $imm"), [], itin> {
   let Constraints = "$rx_ = $rx";
 }
 
-class FRI16_B_ins<bits<5> _op, string asmstr,
-                  InstrItinClass itin>:
-  FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget:$imm),
-        !strconcat(asmstr, "\t$rx, $imm  # 16 bit inst"), [], itin>;
+class FRI16_PC_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
+                    InstrItinClass itin>:
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, ImmOpnd:$imm8),
+              !strconcat(asmstr, "\t$rx, $pseudo, $imm8"), [], itin>;
 
-//
-// RI memory instruction formats
-//
+class FRI16_SP_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
+                    InstrItinClass itin>:
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins SPPseudoReg:$pseudo, ImmOpnd:$imm8),
+              !strconcat(asmstr, "\t$rx, $pseudo, $imm8"), [], itin>;
+
+// TODO Does the immediate need to be a special 'brtarget' type operand?
+class FRI16_B_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
+  FRI16<_op, (outs), (ins  CPU16Opnd:$rx, simm8_lsl1:$imm8),
+        !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
 class FRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
@@ -332,6 +360,14 @@ class FRI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
   FRI16_mem<op, (outs ), (ins  CPU16Opnd:$rx, MemOpnd:$addr),
              !strconcat(asmstr, "\t$rx, $addr"), [], itin>;
+
+//
+// RRI-A instruction format
+//
+
+class FRRI_A16_ins<bits<1> _f, string asmstr, InstrItinClass itin>:
+  FRRI_A16<_f, (outs CPU16Opnd:$ry), (ins CPU16Opnd:$rx, simm4: $imm4),
+           !strconcat(asmstr, "\t$ry, $rx, $imm4"), [], itin>;
 
 //
 // RRI memory instruction formats
@@ -389,8 +425,9 @@ class FJAL16_ins<bits<1> _X, string asmstr,
 //
 // EXT-I instruction format
 //
+// TODO: Remove the simm16_lsl1 type if it is no longer used.
 class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
-  FEXT_I16<eop, (outs), (ins brtarget:$imm16),
+  FEXT_I16<eop, (outs), (ins brtarget16_mips16:$imm16),
            !strconcat(asmstr, "\t$imm16"),[], itin>;
 
 //
@@ -516,6 +553,10 @@ class FEXT_RRI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
 //
 // EXT-RRI-A instruction format
 //
+
+class FEXT_RRI_A16_ins<bits<1> op, string asmstr, InstrItinClass itin>:
+  FEXT_RRI_A16<op, (outs CPU16Opnd:$ry), (ins CPU16Opnd: $rx, simm15: $imm15),
+               !strconcat(asmstr, "\t$ry, $rx, $imm15"), [], itin>;
 
 class FEXT_RRI_A16_mem_ins<bits<1> op, string asmstr, Operand MemOpnd,
                            InstrItinClass itin>:
@@ -797,38 +838,72 @@ class MayStore {
 }
 //
 
-
 // Format: ADDIU rx, immediate MIPS16e
-// Purpose: Add Immediate Unsigned Word (2-Operand, Extended)
+// Purpose: Add Immediate Unsigned Word (2-Operand)
 // To add a constant to a 32-bit integer.
 //
-def AddiuRxImmX16: FEXT_RI16_ins<0b01001, "addiu", IIM16Alu>;
+def AddiuRxImm16: 
+  FRI16_ins<0b01001, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
 
+def AddiuRxImmX16:
+  FEXT_RI16_ins<0b01001, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
+
+// TODO: Is this needed? It's used in a pattern.
 def AddiuRxRxImm16: F2RI16_ins<0b01001, "addiu", IIM16Alu>,
   ArithLogic16Defs<0> {
   let AddedComplexity = 5;
+  let isCodeGenOnly = 1;
 }
+// TODO: Is this needed? It's used in a pattern.
 def AddiuRxRxImmX16: FEXT_2RI16_ins<0b01001, "addiu", IIM16Alu>,
   ArithLogic16Defs<0> {
   let isCodeGenOnly = 1;
 }
 
-def AddiuRxRyOffMemX16:
-  FEXT_RRI_A16_mem_ins<0, "addiu", mem16_ea, IIM16Alu>;
 
+// Format: ADDIU ry, rx immediate MIPS16e
+// Purpose: Add Immediate Unsigned Word (3-Operand)
+// To add a constant to a 32-bit integer.
 //
+def AddiuRyRxImm16: 
+  FRRI_A16_ins<0, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
+
+def AddiuRyRxImmX16:
+  FEXT_RRI_A16_ins<0, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
+
+// TODO: Is this needed? It's used in a pattern.
+def AddiuRxRyOffMemX16:
+  FEXT_RRI_A16_mem_ins<0, "addiu", mem16_ea, IIM16Alu>, ArithLogic16Defs<0> {
+    let isCodeGenOnly = 1;
+}
+
 
 // Format: ADDIU rx, pc, immediate MIPS16e
-// Purpose: Add Immediate Unsigned Word (3-Operand, PC-Relative, Extended)
+// Purpose: Add Immediate Unsigned Word (3-Operand, PC-Relative)
 // To add a constant to the program counter.
 //
-def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu>;
+def AddiuRxPcImm16:
+  FRI16_PC_ins<0b00001, "addiu", uimm8_lsl2, IIM16Alu>;
+
+def AddiuRxPcImmX16:
+  FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu>;
+
 
 // Format: ADDIU rx, sp, immediate MIPS16e
-// Purpose: Add Immediate Unsigned Word (3-Operand, SP-Relative, Extended)
+// Purpose: Add Immediate Unsigned Word (3-Operand, SP-Relative)
 // To add a constant to the stack pointer.
 //
-def AddiuRxSpImmX16: FEXT_RI16_SP_ins<0b00000, "addiu", IIM16Alu>;
+def AddiuRxSpImm16:
+  FRI16_SP_ins<0b00000, "addiu", simm8_lsl3, IIM16Alu> {
+    let Defs = [SP];
+    let Uses = [SP];
+}
+
+def AddiuRxSpImmX16:
+  FEXT_RI16_SP_ins<0b00000, "addiu", IIM16Alu> {
+    let Defs = [SP];
+    let Uses = [SP];
+}
 
 
 //

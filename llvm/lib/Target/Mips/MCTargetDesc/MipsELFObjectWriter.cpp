@@ -272,6 +272,8 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
       return ELF::R_MIPS_PCHI16;
     case Mips::fixup_MIPS_PCLO16:
       return ELF::R_MIPS_PCLO16;
+    case Mips::fixup_MIPS16_PC16_S1:
+      return ELF::R_MIPS16_PC16_S1;
     }
 
     llvm_unreachable("invalid PC-relative fixup kind!");
@@ -656,6 +658,7 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MIPS16_TLS_TPREL_HI16:
   case ELF::R_MIPS16_TLS_TPREL_LO16:
     llvm_unreachable("Unsupported MIPS16 relocation");
+  case ELF::R_MIPS16_PC16_S1:
     return true;
   }
 }

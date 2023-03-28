@@ -2123,6 +2123,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
 
   Inst.setLoc(IDLoc);
 
+#warning TODO: Put MIPS16 branch instructions in here and in MipsInstrInfo::isBranchOffsetInRange().
   if (MCID.isBranch() || MCID.isCall()) {
     MCOperand Offset;
 
@@ -2232,6 +2233,30 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
+    case Mips::Bimm16:
+      assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
+      Offset = Inst.getOperand(0);
+      if (!Offset.isImm()) {
+        // This should already be handled by the 'isConstantImm()' predicate,
+        // but check here in case I'm wrong.
+        return Error(IDLoc,
+                     "compact branch operand must be a constant immediate");
+      }
+      if (!isInt<12>(Offset.getImm()))
+        return Error(IDLoc, "branch target out of range");
+      // For now, ignore the LSbit for compability with GNU AS, which expects
+      // the offset to have the LSbit set.
+      break;
+    case Mips::BimmX16:
+      assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
+      Offset = Inst.getOperand(0);
+      if (!Offset.isImm())
+        break; // We'll deal with this situation later on when applying fixups.
+      if (!isInt<17>(Offset.getImm()))
+        return Error(IDLoc, "branch target out of range");
+      // For now, ignore the LSbit for compability with GNU AS, which expects
+      // the offset to have the LSbit set.
+      break;
     }
   }
 
@@ -2291,6 +2316,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   // three operand instructions. The pre-R6 divide instructions however have
   // two operands and explicitly define HI/LO as part of the instruction,
   // not in the operands.
+#warning TODO: Add MIPS16 div instructions here?
   unsigned FirstOp = 1;
   unsigned SecondOp = 2;
   switch (Opcode) {
@@ -2396,6 +2422,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     ExpandedJalSym = true;
   }
 
+#warning TODO: Does this need modifying for MIPS16 memory instructions?
   if (MCID.mayLoad() || MCID.mayStore()) {
     // Check the offset of memory operand, if it is a symbol
     // reference or immediate we may have to expand instructions.
@@ -2444,7 +2471,8 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
 
     MCOperand Opnd;
     int Imm;
-
+#warning Do NOT put the MIPS16 memory instructions in here (see TODO above). Instead, use this...
+#warning ...info to properly make predicate methods for the MIPS16 memory instructions.
     switch (Opcode) {
       default:
         break;
@@ -7277,7 +7305,7 @@ bool MipsAsmParser::parseParenSuffix(StringRef Name, OperandVector &Operands) {
     Parser.Lex();
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list (1)");
+      return Error(Loc, "unexpected token in argument list");
     }
     if (Parser.getTok().isNot(AsmToken::RParen)) {
       SMLoc Loc = getLexer().getLoc();
@@ -7305,7 +7333,7 @@ bool MipsAsmParser::parseBracketSuffix(StringRef Name,
     Parser.Lex();
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list (2)");
+      return Error(Loc, "unexpected token in argument list");
     }
     if (Parser.getTok().isNot(AsmToken::RBrac)) {
       SMLoc Loc = getLexer().getLoc();
@@ -7343,7 +7371,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
     // Read the first operand.
     if (parseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
-      return Error(Loc, "unexpected token in argument list (3)");
+      return Error(Loc, "unexpected token in argument list");
     }
     if (getLexer().is(AsmToken::LBrac) && parseBracketSuffix(Name, Operands))
       return true;
@@ -7354,7 +7382,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       // Parse and remember the operand.
       if (parseOperand(Operands, Name)) {
         SMLoc Loc = getLexer().getLoc();
-        return Error(Loc, "unexpected token in argument list (4)");
+        return Error(Loc, "unexpected token in argument list");
       }
       // Parse bracket and parenthesis suffixes before we iterate
       if (getLexer().is(AsmToken::LBrac)) {
@@ -7367,7 +7395,7 @@ bool MipsAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
   }
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     SMLoc Loc = getLexer().getLoc();
-    return Error(Loc, "unexpected token in argument list (5)");
+    return Error(Loc, "unexpected token in argument list");
   }
   Parser.Lex(); // Consume the EndOfStatement.
   return false;

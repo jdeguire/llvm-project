@@ -63,10 +63,12 @@ def : InstRW<[GenericWriteALU], (instrs ADDIUPC, ALIGN, ALUIPC, AUI,
 // MIPS16e
 // =======
 
-def : InstRW<[GenericWriteALU], (instrs AddiuRxImmX16, AddiuRxRxImm16,
-                                 AddiuRxRxImmX16, AddiuRxRyOffMemX16,
-                                 AddiuRxPcImmX16, AddiuRxSpImmX16,
-                                 AddiuSpImm16, AddiuSpImmX16, AdduRxRyRz16,
+def : InstRW<[GenericWriteALU], (instrs AddiuRxImm16, AddiuRxImmX16, 
+                                 AddiuRxRxImm16, AddiuRxRxImmX16,
+                                 AddiuRxRyOffMemX16, AddiuRxPcImm16,
+                                 AddiuRxPcImmX16, AddiuRxSpImm16,
+                                 AddiuRxSpImmX16, AddiuSpImm16, AddiuSpImmX16,
+                                 AddiuRyRxImm16, AddiuRyRxImmX16, AdduRxRyRz16,
                                  AndRxRxRy16, Asmacro16, CmpRxRy16,
                                  CmpiRxImm16, CmpiRxImmX16, LiRxImm16,
                                  LiRxImmX16, LiRxImmAlignX16, Move32R16,

@@ -85,6 +85,10 @@ public:
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
 
+  unsigned getUImm8Lsl2Encoding(const MCInst &MI, unsigned OpNo,
+                                SmallVectorImpl<MCFixup> &Fixups,
+                                const MCSubtargetInfo &STI) const;
+
   unsigned getSImm8Lsl3Encoding(const MCInst &MI, unsigned OpNo,
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
@@ -92,6 +96,14 @@ public:
   unsigned getSImm8Lsl1Encoding(const MCInst &MI, unsigned OpNo,
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
+
+  unsigned getSImm11Lsl1Encoding(const MCInst &MI, unsigned OpNo,
+                                 SmallVectorImpl<MCFixup> &Fixups,
+                                 const MCSubtargetInfo &STI) const;
+
+  unsigned getSImm16Lsl1Encoding(const MCInst &MI, unsigned OpNo,
+                                 SmallVectorImpl<MCFixup> &Fixups,
+                                 const MCSubtargetInfo &STI) const;
 
   // getSImm9AddiuspValue - Return binary encoding of the microMIPS addiusp
   // instruction immediate operand.
@@ -151,6 +163,20 @@ public:
   unsigned getBranchTargetOpValueMM(const MCInst &MI, unsigned OpNo,
                                     SmallVectorImpl<MCFixup> &Fixups,
                                     const MCSubtargetInfo &STI) const;
+
+  // getBranchTarget11OpValueMips16 - Return binary encoding of the MIPS16
+  // branch target operand. If the machine operand requires relocation,
+  // record the relocation and return zero.
+  unsigned getBranchTarget11OpValueMips16(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const;
+
+  // getBranchTarget16OpValueMips16 - Return binary encoding of the MIPS16
+  // branch target operand. If the machine operand requires relocation,
+  // record the relocation and return zero.
+  unsigned getBranchTarget16OpValueMips16(const MCInst &MI, unsigned OpNo,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const;
 
   // getBranchTarget21OpValue - Return binary encoding of the branch
   // offset operand. If the machine operand requires relocation,
