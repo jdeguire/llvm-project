@@ -948,6 +948,7 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
 
   // Instruction multiplies framesize value by 8.
   Encoding.bits.framesize = MI.getOperand(OpNo).getImm() >> 3;
+  ++OpNo;
 
   // Get callee-saved regs.
   while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
