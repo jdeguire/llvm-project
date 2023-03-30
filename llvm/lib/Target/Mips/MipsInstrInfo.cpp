@@ -31,6 +31,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "mips-instr-info"
+
 #define GET_INSTRINFO_CTOR_DTOR
 #include "MipsGenInstrInfo.inc"
 
@@ -290,7 +292,7 @@ MipsInstrInfo::BranchType MipsInstrInfo::analyzeBranch(
 
 bool MipsInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                           int64_t BrOffset) const {
-#warning TODO: Does this need updating with MIPS16 branches?
+LLVM_DEBUG(dbgs() << "isBranchOffsetInRange\n");
   switch (BranchOpc) {
   case Mips::B:
   case Mips::BAL:
@@ -443,6 +445,13 @@ bool MipsInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   case Mips::BNZ_D:
   case Mips::BNZ_V:
     return isInt<18>(BrOffset);
+
+  // MIPS16 branches.
+  case Mips::Bimm16:
+    return isInt<12>(BrOffset);
+
+  case Mips::BimmX16:
+    return isInt<17>(BrOffset);
   }
 
   llvm_unreachable("Unknown branch instruction!");

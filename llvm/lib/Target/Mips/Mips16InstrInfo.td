@@ -254,12 +254,14 @@ def brtarget16_mips16 : Operand<OtherVT> {
 
 // This ensures that the compact branch is tried first by being a subclass of
 // MipsJumpTargetAsmOperand. It also requires a constant immediate because
-// there is no fixup available for the compact branch.
+// there is no fixup available for the compact branch. The LSbit of the 
+// immediate will be ignored for compability with GNU AS, which expects it to
+// be set.
 def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
   let Name = "JumpTarget11";
   let ParserMethod = "parseJumpTarget";
-  let PredicateMethod = "isConstantImm";
+  let PredicateMethod = "isConstantSImm<12, 0>";
   let RenderMethod = "addImmOperands";
 }
 def brtarget11_mips16 : Operand<OtherVT> {

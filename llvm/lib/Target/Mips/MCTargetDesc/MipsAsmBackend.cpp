@@ -34,6 +34,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "mips-asm-backend"
+
 // Prepare value for the target space for it
 static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
                                  MCContext &Ctx) {
@@ -515,6 +517,57 @@ getFixupKindInfo(MCFixupKind Kind) const {
     return LittleEndianInfos[Kind - FirstTargetFixupKind];
   return BigEndianInfos[Kind - FirstTargetFixupKind];
 }
+
+unsigned MipsAsmBackend::getRelaxedOpcode(unsigned Op, 
+                                          const MCSubtargetInfo &STI) const {
+  switch (Op) {
+  default:
+    return Op;
+  case Mips::Bimm16:
+    return Mips::BimmX16;
+  }
+}
+
+bool MipsAsmBackend::mayNeedRelaxation(const MCInst &Inst,
+                                      const MCSubtargetInfo &STI) const {
+LLVM_DEBUG(dbgs() << "mayNeedRelaxation\n");
+  if (getRelaxedOpcode(Inst.getOpcode(), STI) != Inst.getOpcode())
+  {
+    // Relax a MIPS16 instruction if it might need to handle a larger 
+    // immediate than the 16-bit form supports. The value may not yet be
+    // known for expressions, so always relax when the immediate operand
+    // (always the last one) is an expression rather than a constant.
+    unsigned RelaxableOp = Inst.getNumOperands() - 1;
+    if (Inst.getOperand(RelaxableOp).isExpr())
+      return true;
+  }
+    return true;
+  return false;
+}
+
+void MipsAsmBackend::relaxInstruction(MCInst &Inst,
+                                      const MCSubtargetInfo &STI) const {
+  unsigned StartingOp = Inst.getOpcode();
+  unsigned RelaxedOp = getRelaxedOpcode(StartingOp, STI);
+
+LLVM_DEBUG(dbgs() << "relaxInstruction\n");
+
+  switch (StartingOp) {
+  default:
+    return;
+  case Mips::Bimm16:
+  {
+    // MCOperand Operand = Inst.getOperand(0);
+    // int64_t imm = 0;
+    // if (!Operand.evaluateAsConstantImm(imm) ||
+    //     imm < -2048 || imm > 2046) {
+      Inst.setOpcode(RelaxedOp);
+    // }
+    break;
+  }
+  }
+}
+
 
 /// WriteNopData - Write an (optimal) nop sequence of Count bytes
 /// to the given output. If the target cannot generate such a sequence,

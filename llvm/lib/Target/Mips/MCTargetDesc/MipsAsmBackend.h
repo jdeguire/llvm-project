@@ -53,6 +53,11 @@ public:
   /// @name Target Relaxation Interfaces
   /// @{
 
+  unsigned getRelaxedOpcode(unsigned Op, const MCSubtargetInfo &STI) const;
+
+  bool mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const override;
+
   /// fixupNeedsRelaxation - Target specific predicate for whether a given
   /// fixup requires the associated instruction to be relaxed.
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
@@ -62,6 +67,9 @@ public:
     llvm_unreachable("RelaxInstruction() unimplemented");
     return false;
   }
+
+  void relaxInstruction(MCInst &Inst,
+                        const MCSubtargetInfo &STI) const override;
 
   bool writeNopData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override;

@@ -583,11 +583,10 @@ static uint64_t fixupCrossModeJump(uint8_t *loc, RelType type, uint64_t val) {
     // as two 16-bit values rather than a single 32-bit value.
     uint16_t inst = read16(loc);
     if ((inst & 0xF800) == 0x1800) { // JAL(X)
-      write16(loc, inst | 0x0200);   // select JALX vs JAL
+      write16(loc, inst | 0x0400);   // select JALX vs JAL
       return val;
     }
     break;
-  }
   }
   case R_MIPS_PC26_S2:
   case R_MIPS_PC21_S2:

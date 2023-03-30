@@ -134,6 +134,7 @@ void MipsMCCodeEmitter::emitInstruction(uint64_t Val, unsigned Size,
   // Little-endian byte ordering:
   //   mips32r2:   4 | 3 | 2 | 1
   //   microMIPS:  2 | 1 | 4 | 3
+#warning TODO: Does this need updating for MIPS16 (which is probably like microMIPS)?
   if (IsLittleEndian && Size == 4 && isMicroMips(STI)) {
     emitInstruction(Val >> 16, 2, STI, OS);
     emitInstruction(Val, 2, STI, OS);
@@ -382,14 +383,13 @@ getBranchTargetOpValueMM(const MCInst &MI, unsigned OpNo,
 }
 
 /// getBranchTarget11OpValueMips16 - Return binary encoding of the MIPS16
-/// branch target operand. If the machine operand requires relocation,
-/// record the relocation and return zero.
+/// branch target operand. The 16-bit instruction does not support relocations.
 unsigned MipsMCCodeEmitter::
 getBranchTarget11OpValueMips16(const MCInst &MI, unsigned OpNo,
                                SmallVectorImpl<MCFixup> &Fixups,
                                const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
-
+LLVM_DEBUG(dbgs() << "getBranchTarget11OpValueMips16 (short)\n");
   // If the destination is an immediate, divide by 2.
   if (MO.isImm()) return MO.getImm() >> 1;
 
@@ -407,7 +407,7 @@ getBranchTarget16OpValueMips16(const MCInst &MI, unsigned OpNo,
                                SmallVectorImpl<MCFixup> &Fixups,
                                const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
-
+LLVM_DEBUG(dbgs() << "getBranchTarget16OpValueMips16 (extended)\n");
   // If the destination is an immediate, divide by 2.
   if (MO.isImm()) return MO.getImm() >> 1;
 
@@ -954,6 +954,8 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
       unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
       if(NumAregStatics < (8 - RegIdx))
         NumAregStatics = 8 - RegIdx;
+      
+      ++OpNo;
   }
 
   // Determine 'aregs' encoding. There are two special cases for when all

@@ -2192,6 +2192,7 @@ static DecodeStatus DecodeBranchTarget26MM(MCInst &Inst, unsigned Offset,
   return MCDisassembler::Success;
 }
 
+#warning TODO: Verify these are correct. Do these need to extract the bits from the instructions manually?
 static DecodeStatus DecodeBranchTarget11Mips16(MCInst &Inst, unsigned Offset,
                                                uint64_t Address,
                                                const MCDisassembler *Decoder) {

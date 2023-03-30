@@ -2122,8 +2122,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   bool ExpandedJalSym = false;
 
   Inst.setLoc(IDLoc);
-
-#warning TODO: Put MIPS16 branch instructions in here and in MipsInstrInfo::isBranchOffsetInRange().
+LLVM_DEBUG(dbgs() << "processInstruction\n");
   if (MCID.isBranch() || MCID.isCall()) {
     MCOperand Offset;
 
