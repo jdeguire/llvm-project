@@ -227,6 +227,12 @@ static DecodeStatus DecodeBranchTarget26MM(MCInst &Inst, unsigned Offset,
                                            uint64_t Address,
                                            const MCDisassembler *Decoder);
 
+// DecodeBranchTarget8Mips16 - Decode MIPS16 branch offset, which is
+// shifted left by 1 bit.
+static DecodeStatus DecodeBranchTarget8Mips16(MCInst &Inst, unsigned Offset,
+                                              uint64_t Address,
+                                              const MCDisassembler *Decoder);
+
 // DecodeBranchTarget11Mips16 - Decode MIPS16 branch offset, which is
 // shifted left by 1 bit.
 static DecodeStatus DecodeBranchTarget11Mips16(MCInst &Inst, unsigned Offset,
@@ -2192,7 +2198,14 @@ static DecodeStatus DecodeBranchTarget26MM(MCInst &Inst, unsigned Offset,
   return MCDisassembler::Success;
 }
 
-#warning TODO: Verify these are correct. Do these need to extract the bits from the instructions manually?
+static DecodeStatus DecodeBranchTarget8Mips16(MCInst &Inst, unsigned Offset,
+                                               uint64_t Address,
+                                               const MCDisassembler *Decoder) {
+  int32_t BranchOffset = SignExtend32<9>(Offset << 1);
+  Inst.addOperand(MCOperand::createImm(BranchOffset));
+  return MCDisassembler::Success;
+}
+
 static DecodeStatus DecodeBranchTarget11Mips16(MCInst &Inst, unsigned Offset,
                                                uint64_t Address,
                                                const MCDisassembler *Decoder) {

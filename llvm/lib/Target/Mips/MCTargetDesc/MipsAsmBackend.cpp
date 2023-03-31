@@ -525,6 +525,10 @@ unsigned MipsAsmBackend::getRelaxedOpcode(unsigned Op,
     return Op;
   case Mips::Bimm16:
     return Mips::BimmX16;
+  case Mips::BeqzRxImm16:
+    return Mips::BeqzRxImmX16;
+  case Mips::BnezRxImm16:
+    return Mips::BnezRxImmX16;
   }
 }
 
@@ -552,20 +556,24 @@ void MipsAsmBackend::relaxInstruction(MCInst &Inst,
 
 LLVM_DEBUG(dbgs() << "relaxInstruction\n");
 
-  switch (StartingOp) {
-  default:
-    return;
-  case Mips::Bimm16:
-  {
-    // MCOperand Operand = Inst.getOperand(0);
-    // int64_t imm = 0;
-    // if (!Operand.evaluateAsConstantImm(imm) ||
-    //     imm < -2048 || imm > 2046) {
-      Inst.setOpcode(RelaxedOp);
-    // }
-    break;
+  if (StartingOp != RelaxedOp) {
+    Inst.setOpcode(RelaxedOp);
   }
-  }
+
+  // switch (StartingOp) {
+  // default:
+  //   return;
+  // case Mips::Bimm16:
+  // {
+  //   MCOperand Operand = Inst.getOperand(0);
+  //   int64_t imm = 0;
+  //   if (!Operand.evaluateAsConstantImm(imm) ||
+  //       imm < -2048 || imm > 2046) {
+  //     Inst.setOpcode(RelaxedOp);
+  //   }
+  //   break;
+  // }
+  // }
 }
 
 

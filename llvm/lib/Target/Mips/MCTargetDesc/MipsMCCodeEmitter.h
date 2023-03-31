@@ -164,9 +164,16 @@ public:
                                     SmallVectorImpl<MCFixup> &Fixups,
                                     const MCSubtargetInfo &STI) const;
 
+  // getBranchTarget8OpValueMips16 - Return binary encoding of the MIPS16
+  // branch target operand. The 16-bit instruction does not support
+  // relocations.
+  unsigned getBranchTarget8OpValueMips16(const MCInst &MI, unsigned OpNo,
+                                         SmallVectorImpl<MCFixup> &Fixups,
+                                         const MCSubtargetInfo &STI) const;
+
   // getBranchTarget11OpValueMips16 - Return binary encoding of the MIPS16
-  // branch target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
+  // branch target operand. The 16-bit instruction does not support
+  // relocations.
   unsigned getBranchTarget11OpValueMips16(const MCInst &MI, unsigned OpNo,
                                           SmallVectorImpl<MCFixup> &Fixups,
                                           const MCSubtargetInfo &STI) const;

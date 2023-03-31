@@ -382,6 +382,24 @@ getBranchTargetOpValueMM(const MCInst &MI, unsigned OpNo,
   return 0;
 }
 
+/// getBranchTarget8OpValueMips16 - Return binary encoding of the MIPS16
+/// branch target operand. The 16-bit instruction does not support relocations.
+#warning TODO: Can these 8- and 11-bit encoder functions be merged? 
+unsigned MipsMCCodeEmitter::
+getBranchTarget8OpValueMips16(const MCInst &MI, unsigned OpNo,
+                              SmallVectorImpl<MCFixup> &Fixups,
+                              const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+LLVM_DEBUG(dbgs() << "getBranchTarget8OpValueMips16 (short)\n");
+  // If the destination is an immediate, divide by 2.
+  if (MO.isImm()) return MO.getImm() >> 1;
+
+  assert(false &&
+         "getBranchTarget8OpValueMips16 expects only constant immediates");
+
+  return 0;
+}
+
 /// getBranchTarget11OpValueMips16 - Return binary encoding of the MIPS16
 /// branch target operand. The 16-bit instruction does not support relocations.
 unsigned MipsMCCodeEmitter::

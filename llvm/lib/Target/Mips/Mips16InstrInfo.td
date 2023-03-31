@@ -252,14 +252,14 @@ def brtarget16_mips16 : Operand<OtherVT> {
   let PrintMethod = "printBranchOperand";
 }
 
-// This ensures that the compact branch is tried first by being a subclass of
-// MipsJumpTargetAsmOperand. It also requires a constant immediate because
-// there is no fixup available for the compact branch. The LSbit of the 
+// These ensure that the compact branch is tried first by being a subclass of
+// MipsJumpTargetAsmOperand. They also require a constant immediate because
+// there is no fixup available for the compact branches. The LSbit of the 
 // immediate will be ignored for compability with GNU AS, which expects it to
 // be set.
 def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
-  let Name = "JumpTarget11";
+  let Name = "JumpTarget11Mips16";
   let ParserMethod = "parseJumpTarget";
   let PredicateMethod = "isConstantSImm<12, 0>";
   let RenderMethod = "addImmOperands";
@@ -272,14 +272,29 @@ def brtarget11_mips16 : Operand<OtherVT> {
   let PrintMethod = "printBranchOperand";
 }
 
+def Mips16JumpTarget8AsmOperand : AsmOperandClass {
+  let SuperClasses = [MipsJumpTargetAsmOperand];
+  let Name = "JumpTarget8Mips16";
+  let ParserMethod = "parseJumpTarget";
+  let PredicateMethod = "isConstantSImm<9, 0>";
+  let RenderMethod = "addImmOperands";
+}
+def brtarget8_mips16 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTarget11OpValueMips16";
+  let OperandType   = "OPERAND_PCREL";
+  let DecoderMethod = "DecodeBranchTarget8Mips16";
+  let ParserMatchClass = Mips16JumpTarget8AsmOperand;
+  let PrintMethod = "printBranchOperand";
+}
+
 //
 // I-type instruction format
 //
-// this is only used by bimm. the actual assembly value is a 12 bit signed
+// This is used only by Bimm16. The actual assembly value is a 12-bit signed
 // number
 //
 // TODO Remove the simm11_lsl1 type from wherever it's defined if it's no longer used.
-class FI16_ins<bits<5> op, string asmstr, InstrItinClass itin>:
+class FI16_B_ins<bits<5> op, string asmstr, InstrItinClass itin>:
   FI16<op, (outs), (ins brtarget11_mips16:$imm11),
             !strconcat(asmstr, "\t$imm11"), [], itin>;
 
@@ -315,6 +330,7 @@ class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd,
 //  FRI16<op, (outs CPU16Opnd:$rx), (ins simm16:$imm),
 //        !strconcat(asmstr, asmstr2), [], itin>;
 
+// TODO: Can I merge this with the PC and SP versions below by specifying operand type in declaration?
 class FRI16_ins<bits<5> op, string asmstr, InstrItinClass itin>:
   FRI16<op, (outs CPU16Opnd:$rx), (ins simm8:$imm),
         !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
@@ -324,6 +340,7 @@ class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm, i32imm:$size),
             !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
 
+// TODO: Can this be combined with the one below it? The one below is the only place this is used.
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
   FRI16<op, (outs), (ins CPU16Opnd:$rx, simm16:$imm),
@@ -348,9 +365,9 @@ class FRI16_SP_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
   FRI16<_op, (outs CPU16Opnd:$rx), (ins SPPseudoReg:$pseudo, ImmOpnd:$imm8),
               !strconcat(asmstr, "\t$rx, $pseudo, $imm8"), [], itin>;
 
-// TODO Does the immediate need to be a special 'brtarget' type operand?
+// TODO: Remove simm8_lsl1 if it is no longer used.
 class FRI16_B_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FRI16<_op, (outs), (ins  CPU16Opnd:$rx, simm8_lsl1:$imm8),
+  FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget8_mips16:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
 class FRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
@@ -508,7 +525,7 @@ class FEXT_RI16_SP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
                       InstrItinClass itin>:
-  FEXT_RI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget:$imm16),
+  FEXT_RI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget16_mips16:$imm16),
             !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr,
@@ -953,6 +970,20 @@ def Asmacro16: FASMACRO16<(outs),
                            "asmacro\t$select, $_p0, $_p1, $_p2, $_p3, $_p4", 
                            [], IIM16Alu>;
 
+
+//
+// Format: B offset MIPS16e
+// Purpose: Unconditional Branch (Extended)
+// To do an unconditional PC-relative branch.
+//
+def Bimm16: FI16_B_ins<0b00010, "b", IIM16Alu>, branch16;
+
+// Format: B offset MIPS16e
+// Purpose: Unconditional Branch
+// To do an unconditional PC-relative branch.
+//
+def BimmX16: FEXT_I16_ins<0b00010, "b", IIM16Alu>, branch16;
+
 //
 // Format: BEQZ rx, offset MIPS16e
 // Purpose: Branch on Equal to Zero
@@ -960,27 +991,12 @@ def Asmacro16: FASMACRO16<(outs),
 //
 def BeqzRxImm16: FRI16_B_ins<0b00100, "beqz", IIM16Alu>, cbranch16;
 
-
 //
 // Format: BEQZ rx, offset MIPS16e
 // Purpose: Branch on Equal to Zero (Extended)
 // To test a GPR then do a PC-relative conditional branch.
 //
 def BeqzRxImmX16: FEXT_RI16_B_ins<0b00100, "beqz", IIM16Alu>, cbranch16;
-
-//
-// Format: B offset MIPS16e
-// Purpose: Unconditional Branch (Extended)
-// To do an unconditional PC-relative branch.
-//
-
-def Bimm16: FI16_ins<0b00010, "b", IIM16Alu>, branch16;
-
-// Format: B offset MIPS16e
-// Purpose: Unconditional Branch
-// To do an unconditional PC-relative branch.
-//
-def BimmX16: FEXT_I16_ins<0b00010, "b", IIM16Alu>, branch16;
 
 //
 // Format: BNEZ rx, offset MIPS16e
