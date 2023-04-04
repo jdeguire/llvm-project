@@ -257,6 +257,7 @@ def brtarget16_mips16 : Operand<OtherVT> {
 // there is no fixup available for the compact branches. The LSbit of the 
 // immediate will be ignored for compability with GNU AS, which expects it to
 // be set.
+// TODO: Can these two use the same encoder and maybe decoder methods?
 def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
   let Name = "JumpTarget11Mips16";
@@ -280,7 +281,7 @@ def Mips16JumpTarget8AsmOperand : AsmOperandClass {
   let RenderMethod = "addImmOperands";
 }
 def brtarget8_mips16 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTarget11OpValueMips16";
+  let EncoderMethod = "getBranchTarget8OpValueMips16";
   let OperandType   = "OPERAND_PCREL";
   let DecoderMethod = "DecodeBranchTarget8Mips16";
   let ParserMatchClass = Mips16JumpTarget8AsmOperand;
@@ -303,6 +304,7 @@ class FI16_B_ins<bits<5> op, string asmstr, InstrItinClass itin>:
 // I8 instruction format
 //
 
+// TODO: Can this be combined with the one below it? The one below is the only place this is used.
 class FI816_ins_base<bits<3> _func, string asmstr,
                      string asmstr2, InstrItinClass itin>:
   FI816<_func, (outs), (ins simm16:$imm), !strconcat(asmstr, asmstr2),
@@ -310,6 +312,10 @@ class FI816_ins_base<bits<3> _func, string asmstr,
 
 class FI816_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
   FI816_ins_base<_func, asmstr, "\t$imm", itin>;
+
+class FI816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
+  FI816<_func, (outs), (ins brtarget8_mips16:$imm8), 
+        !strconcat(asmstr, "\t$imm8"), [], itin>;
 
 class FI816_SP_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
   FI816<_func, (outs), (ins SPPseudoReg:$pseudo, simm8_lsl3:$imm8),
@@ -463,7 +469,7 @@ class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
 //  FEXT_I816_ins_base<_func, asmstr, "\t$imm16", itin>;
 
 class FEXT_I816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins brtarget:$imm16),
+  FEXT_I816<_func, (outs), (ins brtarget16_mips16:$imm16),
             !strconcat(asmstr, "\t$imm16"), [], itin>;
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
@@ -658,7 +664,7 @@ class FC16_ins<bits<5> _funct, string asmstr, InstrItinClass itin> :
 //
 // RR-type instruction format
 //
-
+// TODO: This is not used. Remove it?
 class FRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
   FRR16<f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
@@ -1025,7 +1031,7 @@ def Break16: FC16_ins<0b00101, "break", IIM16Alu>;
 // Purpose: Branch on T Equal to Zero (Extended)
 // To test special register T then do a PC-relative conditional branch.
 //
-def Bteqz16: FI816_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
+def Bteqz16: FI816_B_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
   let Uses = [T8];
 }
 
@@ -1053,7 +1059,7 @@ def BteqzT8SltiuX16: FEXT_T8I8I16_ins<"bteqz", "sltiu">,
 // To test special register T then do a PC-relative conditional branch.
 //
 
-def Btnez16: FI816_ins<0b001, "btnez", IIM16Alu>, cbranch16 {
+def Btnez16: FI816_B_ins<0b001, "btnez", IIM16Alu>, cbranch16 {
   let Uses = [T8];
 }
 
