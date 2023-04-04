@@ -347,6 +347,7 @@ class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
             !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
 
 // TODO: Can this be combined with the one below it? The one below is the only place this is used.
+// TODO: Isn't this a uimm8?
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
   FRI16<op, (outs), (ins CPU16Opnd:$rx, simm16:$imm),
@@ -512,11 +513,13 @@ class FEXT_RI16_ins<bits<5> _op, string asmstr,
                     InstrItinClass itin>:
   FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
 
+// TODO: Can this be combined with the one below it? This is the only place it is used.
 class FEXT_RI16R_ins_base<bits<5> _op, string asmstr, string asmstr2,
                          InstrItinClass itin>:
   FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, simm16:$imm16),
                   !strconcat(asmstr, asmstr2), [], itin>;
 
+// TODO: This needs either an unsigned version or the operand type needs to be selectable.
 class FEXT_RI16R_ins<bits<5> _op, string asmstr,
                     InstrItinClass itin>:
   FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;

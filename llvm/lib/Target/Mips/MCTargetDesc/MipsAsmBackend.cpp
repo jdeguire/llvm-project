@@ -529,6 +529,10 @@ unsigned MipsAsmBackend::getRelaxedOpcode(unsigned Op,
     return Mips::BeqzRxImmX16;
   case Mips::BnezRxImm16:
     return Mips::BnezRxImmX16;
+  case Mips::Bteqz16:
+    return Mips::BteqzX16;
+  case Mips::Btnez16:
+    return Mips::BtnezX16;
   }
 }
 
