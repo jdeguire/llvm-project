@@ -108,6 +108,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
     return R_MIPS_GOTREL;
   case R_MIPS_26:
   case R_MICROMIPS_26_S1:
+  case R_MIPS16_26:
     return R_PLT;
   case R_MICROMIPS_PC26_S1:
     return R_PLT_PC;
@@ -240,6 +241,20 @@ static uint32_t readMips16ExtendValue(const uint8_t *loc) {
   return val;
 }
 
+static uint32_t readMips16JalValue(const uint8_t *loc) {
+  // MIPS16 JAL and JALX are special extended instructions. They're stored
+  // like two 16-bit instructions, but the second word is an immediate
+  // instead of an instruction. Both parts combine for a 26-bit value.
+  uint32_t ext = read16(loc);
+  uint32_t imm = read16(loc+2);
+
+  uint32_t val = imm;
+  val |= (ext & 0x03E0) << 11;
+  val |= (ext & 0x1F) << 21;
+
+  return val;
+}
+
 static void writeValue(uint8_t *loc, uint64_t v, uint8_t bitsSize,
                        uint8_t shift) {
   uint32_t instr = read32(loc);
@@ -273,6 +288,18 @@ static void writeMips16ExtendValue(uint8_t *loc, uint64_t v) {
 
   ins |= (v & 0x1f);
   write16(loc+2, ins);
+}
+
+static void writeMips16JalValue(uint8_t *loc, uint64_t v) {
+  // See readMips16JalValue for more info.
+  uint16_t ext = read16(loc) & 0xFC00;
+  uint16_t imm = v & 0xFFFF;
+
+  ext |= (v & 0x001F0000) >> 11;
+  ext |= (v & 0x03E00000) >> 21;
+  write16(loc, ext);
+
+  write16(loc+2, imm);
 }
 
 template <endianness E>
@@ -500,6 +527,8 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
   case R_MIPS_JALR:
     // These relocations are defined as not having an implicit addend.
     return 0;
+  case R_MIPS16_26:
+    return SignExtend64<28>(readMips16JalValue(buf) << 2);
   case R_MIPS16_PC16_S1:
     return SignExtend64<17>(readMips16ExtendValue(buf) << 1);
   default:
@@ -792,6 +821,9 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MICROMIPS_PC23_S2:
     checkInt(loc, val, 25, rel);
     writeShuffleValue<e>(loc, val, 23, 2);
+    break;
+  case R_MIPS16_26:
+    writeMips16JalValue(loc, val >> 2);
     break;
   case R_MIPS16_PC16_S1:
     checkInt(loc, val, 17, rel);

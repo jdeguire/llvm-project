@@ -388,6 +388,8 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
     return ELF::R_MIPS_JALR;
   case Mips::fixup_MICROMIPS_JALR:
     return ELF::R_MICROMIPS_JALR;
+  case Mips::fixup_MIPS16_26:
+    return ELF::R_MIPS16_26;
   }
 
   llvm_unreachable("invalid fixup kind!");
@@ -647,7 +649,6 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
 
   // FIXME: Many of these should probably return false but MIPS16 isn't
   //        supported by the integrated assembler.
-  case ELF::R_MIPS16_26:
   case ELF::R_MIPS16_GPREL:
   case ELF::R_MIPS16_CALL16:
   case ELF::R_MIPS16_TLS_GD:
@@ -658,6 +659,7 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MIPS16_TLS_TPREL_HI16:
   case ELF::R_MIPS16_TLS_TPREL_LO16:
     llvm_unreachable("Unsupported MIPS16 relocation");
+  case ELF::R_MIPS16_26:
   case ELF::R_MIPS16_PC16_S1:
     return true;
   }

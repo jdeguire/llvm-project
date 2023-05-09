@@ -245,6 +245,12 @@ static DecodeStatus DecodeBranchTarget16Mips16(MCInst &Inst, unsigned Offset,
                                                uint64_t Address,
                                                const MCDisassembler *Decoder);
 
+// DecodeJumpTargetMips16 - Decode MIPS16 jump target, which is
+// shifted left by 2 bits.
+static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Insn,
+                                           uint64_t Address,
+                                           const MCDisassembler *Decoder);
+
 // DecodeJumpTargetMM - Decode microMIPS jump target, which is
 // shifted left by 1 bit.
 static DecodeStatus DecodeJumpTargetMM(MCInst &Inst, unsigned Insn,
@@ -2219,6 +2225,14 @@ static DecodeStatus DecodeBranchTarget16Mips16(MCInst &Inst, unsigned Offset,
                                                const MCDisassembler *Decoder) {
   int32_t BranchOffset = SignExtend32<17>(Offset << 1);
   Inst.addOperand(MCOperand::createImm(BranchOffset));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Insn,
+                                           uint64_t Address,
+                                           const MCDisassembler *Decoder) {
+  unsigned JumpOffset = fieldFromInstruction(Insn, 0, 26) << 2;
+  Inst.addOperand(MCOperand::createImm(JumpOffset));
   return MCDisassembler::Success;
 }
 

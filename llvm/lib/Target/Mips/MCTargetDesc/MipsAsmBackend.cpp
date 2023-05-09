@@ -96,6 +96,7 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     }
     break;
   case Mips::fixup_Mips_26:
+  case Mips::fixup_MIPS16_26:
     // So far we are only using this type for jumps.
     // The displacement is then divided by 4 to give us an 28 bit
     // address range.
@@ -396,6 +397,7 @@ getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MIPS_PC26_S2",      0,     26,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCHI16",       0,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCLO16",       0,     16,  MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_MIPS16_26",         0,     26,   0 },
     { "fixup_MIPS16_PC16_S1",    0,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MICROMIPS_26_S1",   0,     26,   0 },
     { "fixup_MICROMIPS_HI16",    0,     16,   0 },
@@ -476,6 +478,7 @@ getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MIPS_PC26_S2",      6,     26,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCHI16",      16,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCLO16",      16,     16,  MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_MIPS16_26",         6,     26,   0 },
     { "fixup_MIPS16_PC16_S1",   16,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MICROMIPS_26_S1",   6,     26,   0 },
     { "fixup_MICROMIPS_HI16",   16,     16,   0 },

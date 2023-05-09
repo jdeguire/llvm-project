@@ -244,6 +244,7 @@ def mem16_ea : Operand<i32> {
 // TODO: Will this still be needed later?
 def pcrel16 : Operand<i32>;
 
+// Used for extended branches.
 def brtarget16_mips16 : Operand<OtherVT> {
   let EncoderMethod = "getBranchTarget16OpValueMips16";
   let OperandType   = "OPERAND_PCREL";
@@ -252,9 +253,17 @@ def brtarget16_mips16 : Operand<OtherVT> {
   let PrintMethod = "printBranchOperand";
 }
 
-// These ensure that the compact branch is tried first by being a subclass of
-// MipsJumpTargetAsmOperand. They also require a constant immediate because
-// there is no fixup available for the compact branches. The LSbit of the 
+// Used for JAL and JALX
+def calltarget_mips16 : Operand<iPTR> {
+  let EncoderMethod = "getJumpTargetOpValueMips16";
+  let DecoderMethod = "DecodeJumpTargetMips16";
+  let ParserMatchClass = MipsJumpTargetAsmOperand;
+  let PrintMethod = "printJumpOperand";
+}
+
+// These ensure that the compressed branch is tried first by being a subclass
+// of MipsJumpTargetAsmOperand. They also require a constant immediate because
+// there is no fixup available for the compressed branches. The LSbit of the 
 // immediate will be ignored for compability with GNU AS, which expects it to
 // be set.
 // TODO: Can these two use the same encoder and maybe decoder methods?
@@ -347,14 +356,13 @@ class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
             !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
 
 // TODO: Can this be combined with the one below it? The one below is the only place this is used.
-// TODO: Isn't this a uimm8?
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
                      InstrItinClass itin>:
-  FRI16<op, (outs), (ins CPU16Opnd:$rx, simm16:$imm),
+  FRI16<op, (outs), (ins CPU16Opnd:$rx, uimm8:$imm8),
         !strconcat(asmstr, asmstr2), [], itin>;
 
 class FRI16R_ins<bits<5> op, string asmstr, InstrItinClass itin>:
-  FRI16R_ins_base<op, asmstr, "\t$rx, $imm", itin>;
+  FRI16R_ins_base<op, asmstr, "\t$rx, $imm8", itin>;
 
 class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm),
@@ -443,9 +451,10 @@ class FJALB16_codegen_ins<bits<1> _X, string asmstr,
   let Size=6;
 }
 
+// TODO: Remove the uimm26_lsl2 type if it is no longer used.
 class FJAL16_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
-  FJAL16<_X, (outs), (ins uimm26_lsl2:$imm26),
+  FJAL16<_X, (outs), (ins calltarget_mips16:$imm26),
          !strconcat(asmstr, "\t$imm26"),[], itin>;
 
 //
@@ -1136,6 +1145,9 @@ def DivuRxRy16: FRR16_div_ins<0b11011, "divu", IIM16Alu> {
 // region and preserve the current ISA.
 //
 
+// TODO: Are these pseudo instructions still needed?
+//       The code now has support for adding MIPS16 delay slots, which seem to be what these do.
+//       If these can go away, then we can rename "Jal16imm" to "Jal16".
 def Jal16 : FJAL16_codegen_ins<0, "jal", IIM16Alu> {
   let hasDelaySlot = 0;  // not true, but we add the nop for now
   let isCall = 1;
@@ -1401,7 +1413,7 @@ def Move32R16: FI8_MOV32R16_ins<"move", IIM16Alu> {
 
 //
 // Format: MOVE ry, r32 MIPS16e
-//Purpose: Move
+// Purpose: Move
 // To move the contents of a GPR to a GPR.
 //
 def MoveR3216: FI8_MOVR3216_ins<"move", IIM16Alu> {

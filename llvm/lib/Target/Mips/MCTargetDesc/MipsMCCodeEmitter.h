@@ -64,12 +64,19 @@ public:
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
 
-  // getBranchJumpOpValueMM - Return binary encoding of the microMIPS jump
+  // getJumpTargetOpValueMM - Return binary encoding of the microMIPS jump
   // target operand. If the machine operand requires relocation,
   // record the relocation and return zero.
   unsigned getJumpTargetOpValueMM(const MCInst &MI, unsigned OpNo,
                                   SmallVectorImpl<MCFixup> &Fixups,
                                   const MCSubtargetInfo &STI) const;
+
+  // getJumpTargetOpValueMips16 - Return binary encoding of the microMIPS jump
+  // target operand. If the machine operand requires relocation,
+  // record the relocation and return zero.
+  unsigned getJumpTargetOpValueMips16(const MCInst &MI, unsigned OpNo,
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const;
 
   // getUImm5Lsl2Encoding - Return binary encoding of the microMIPS jump
   // target operand.

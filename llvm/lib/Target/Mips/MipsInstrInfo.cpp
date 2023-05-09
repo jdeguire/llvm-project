@@ -66,14 +66,19 @@ insertNoop(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI) const
 MachineInstrBuilder MipsInstrInfo::insertNop(MachineBasicBlock &MBB,
                                              MachineBasicBlock::iterator MI,
                                              DebugLoc DL) const {
-  assert(!Subtarget.inMips16Mode() &&
-         "insertNop does not support MIPS16e mode at this time");
-  const unsigned MMOpc =
-      Subtarget.hasMips32r6() ? Mips::SLL_MMR6 : Mips::SLL_MM;
-  const unsigned Opc = Subtarget.inMicroMipsMode() ? MMOpc : Mips::SLL;
-  return BuildMI(MBB, MI, DL, get(Opc), Mips::ZERO)
-      .addReg(Mips::ZERO)
-      .addImm(0);
+  if (Subtarget.inMips16Mode()) {
+    // Delay slots are always 16 bits in MIPS16, so insert 16-bit nop.
+    return BuildMI(MBB, MI, DL, get(Mips::Move32R16), Mips::ZERO)
+        .addReg(Mips::S0);
+  }
+  else {
+    const unsigned MMOpc =
+        Subtarget.hasMips32r6() ? Mips::SLL_MMR6 : Mips::SLL_MM;
+    const unsigned Opc = Subtarget.inMicroMipsMode() ? MMOpc : Mips::SLL;
+    return BuildMI(MBB, MI, DL, get(Opc), Mips::ZERO)
+        .addReg(Mips::ZERO)
+        .addImm(0);
+  }
 }
 
 MachineMemOperand *
@@ -446,6 +451,7 @@ LLVM_DEBUG(dbgs() << "isBranchOffsetInRange\n");
   case Mips::BNZ_V:
     return isInt<18>(BrOffset);
 
+#warning TODO: This probably needs other MIPS16 branches, like bnez and beqz and their "t" forms.
   // MIPS16 branches.
   case Mips::Bimm16:
     return isInt<12>(BrOffset);
@@ -462,6 +468,19 @@ unsigned MipsInstrInfo::getEquivalentCompactForm(
     const MachineBasicBlock::iterator I) const {
   unsigned Opcode = I->getOpcode();
   bool canUseShortMicroMipsCTI = false;
+
+  if (Subtarget.inMips16Mode()) {
+    switch(Opcode) {
+    case Mips::JrRa16:
+      return Mips::JrcRa16;
+    case Mips::JrRx16:
+      return Mips::JrcRx16;
+    case Mips::JalrRaRx16:
+      return Mips::JalrcRaRx16;
+    default:
+      return 0;
+    }
+  }
 
   if (Subtarget.inMicroMipsMode()) {
     switch (Opcode) {

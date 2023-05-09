@@ -604,6 +604,7 @@ bool MipsDelaySlotFiller::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   bool Changed = false;
   const MipsSubtarget &STI = MBB.getParent()->getSubtarget<MipsSubtarget>();
   bool InMicroMipsMode = STI.inMicroMipsMode();
+  bool InMips16Mode = STI.inMips16Mode();
   const MipsInstrInfo *TII = STI.getInstrInfo();
 
   for (Iter I = MBB.begin(); I != MBB.end(); ++I) {
@@ -663,10 +664,12 @@ bool MipsDelaySlotFiller::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
     // PseudoReturn and PseudoIndirectBranch are expanded to JR_MM, so they can
     // be replaced with JRC16_MM.
 
+    // For MIPS16 attempt to replace jump instructions with compact form.
+
     // For MIPSR6 attempt to produce the corresponding compact (no delay slot)
     // form of the CTI. For indirect jumps this will not require inserting a
     // NOP and for branches will hopefully avoid requiring a NOP.
-    if ((InMicroMipsMode ||
+    if ((InMicroMipsMode || InMips16Mode ||
          (STI.hasMips32r6() && MipsCompactBranchPolicy != CB_Never)) &&
         TII->getEquivalentCompactForm(I)) {
       I = replaceWithCompactBranch(MBB, I, I->getDebugLoc());
@@ -743,12 +746,13 @@ bool MipsDelaySlotFiller::searchRange(MachineBasicBlock &MBB, IterTy Begin,
     bool InMicroMipsMode = STI.inMicroMipsMode();
     const MipsInstrInfo *TII = STI.getInstrInfo();
     unsigned Opcode = (*Slot).getOpcode();
+    unsigned InstSize = TII->getInstSizeInBytes(*CurrI);
     // This is complicated by the tail call optimization. For non-PIC code
     // there is only a 32bit sized unconditional branch which can be assumed
     // to be able to reach the target. b16 only has a range of +/- 1 KB.
     // It's entirely possible that the target function is reachable with b16
     // but we don't have enough information to make that decision.
-     if (InMicroMipsMode && TII->getInstSizeInBytes(*CurrI) == 2 &&
+     if (InMicroMipsMode && InstSize == 2 &&
         (Opcode == Mips::JR || Opcode == Mips::PseudoIndirectBranch ||
          Opcode == Mips::PseudoIndirectBranch_MM ||
          Opcode == Mips::PseudoReturn || Opcode == Mips::TAILCALL))
@@ -758,6 +762,13 @@ bool MipsDelaySlotFiller::searchRange(MachineBasicBlock &MBB, IterTy Begin,
      if (InMicroMipsMode && (Opcode == Mips::LWP_MM || Opcode == Mips::SWP_MM ||
                              Opcode == Mips::MOVEP_MM))
        continue;
+
+    // In MIPS16 mode, only 16-bit instructions can be used in delay slots.
+    if (STI.inMips16Mode() && InstSize != 2) {
+      LLVM_DEBUG(dbgs() << DEBUG_TYPE ": ignoring MIPS16 32-bit instruction: ";
+                 CurrI->dump());
+      continue;
+    }
 
     Filler = CurrI;
     LLVM_DEBUG(dbgs() << DEBUG_TYPE ": found instruction for delay slot: ";

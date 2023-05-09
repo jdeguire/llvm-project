@@ -1999,7 +1999,6 @@ static const MCInstrDesc &getInstDesc(unsigned Opcode) {
 }
 
 static bool hasShortDelaySlot(MCInst &Inst) {
-#warning TODO: Do any MIPS16 instructions have a short delay slot?
   switch (Inst.getOpcode()) {
     case Mips::BEQ_MM:
     case Mips::BNE_MM:
@@ -2013,6 +2012,11 @@ static bool hasShortDelaySlot(MCInst &Inst) {
     case Mips::JALRS16_MM:
     case Mips::BGEZALS_MM:
     case Mips::BLTZALS_MM:
+    case Mips::Jal16imm:
+    case Mips::Jalx16:
+    case Mips::JrRa16:
+    case Mips::JrRx16:
+    case Mips::JalrRaRx16:
       return true;
     case Mips::J_MM:
       return !Inst.getOperand(0).isReg();
@@ -2232,6 +2236,8 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
       if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
+#warning TODO: Should Bimm16 be here? It is the compressed version, so maybe not.
+#warning TODO: Really, do any of these need to be here?
     case Mips::Bimm16:
       assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
       Offset = Inst.getOperand(0);
@@ -2239,7 +2245,7 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
         // This should already be handled by the 'isConstantImm()' predicate,
         // but check here in case I'm wrong.
         return Error(IDLoc,
-                     "compact branch operand must be a constant immediate");
+                     "compressed branch operand must be a constant immediate");
       }
       if (!isInt<12>(Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
@@ -2255,6 +2261,17 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
         return Error(IDLoc, "branch target out of range");
       // For now, ignore the LSbit for compability with GNU AS, which expects
       // the offset to have the LSbit set.
+      break;
+    case Mips::Jal16imm:
+    case Mips::Jalx16:
+      assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
+      Offset = Inst.getOperand(0);
+      if (!Offset.isImm())
+        break; // We'll deal with this situation later on when applying fixups.
+      if (!isInt<28>(Offset.getImm()))
+        return Error(IDLoc, "branch target out of range");
+      if (offsetToAlignment(Offset.getImm(), Align(4)))
+        return Error(IDLoc, "branch to misaligned address");
       break;
     }
   }
