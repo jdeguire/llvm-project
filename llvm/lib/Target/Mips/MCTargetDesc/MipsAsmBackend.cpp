@@ -56,6 +56,7 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   case Mips::fixup_Mips_GOT_DISP:
   case Mips::fixup_Mips_GOT_LO16:
   case Mips::fixup_Mips_CALL_LO16:
+  case Mips::fixup_MIPS16_LO16:
   case Mips::fixup_MICROMIPS_GPOFF_HI:
   case Mips::fixup_MICROMIPS_GPOFF_LO:
   case Mips::fixup_MICROMIPS_LO16:
@@ -103,7 +104,9 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     Value >>= 2;
     break;
   case Mips::fixup_Mips_HI16:
+  case Mips::fixup_MIPS16_HI16:
   case Mips::fixup_Mips_GOT:
+  case Mips::fixup_MIPS16_GOT16:
   case Mips::fixup_MICROMIPS_GOT16:
   case Mips::fixup_Mips_GOT_HI16:
   case Mips::fixup_Mips_CALL_HI16:
@@ -324,6 +327,20 @@ Optional<MCFixupKind> MipsAsmBackend::getFixupKind(StringRef Name) const {
       .Case("R_MIPS_TLS_LDM", (MCFixupKind)Mips::fixup_Mips_TLSLDM)
       .Case("R_MIPS_TLS_TPREL_HI16", (MCFixupKind)Mips::fixup_Mips_TPREL_HI)
       .Case("R_MIPS_TLS_TPREL_LO16", (MCFixupKind)Mips::fixup_Mips_TPREL_LO)
+      .Case("R_MIPS16_GOT16", (MCFixupKind)Mips::fixup_MIPS16_GOT16)
+      .Case("R_MIPS16_CALL16", (MCFixupKind)Mips::fixup_MIPS16_CALL16)
+      .Case("R_MIPS16_TLS_GOTTPREL",
+            (MCFixupKind)Mips::fixup_MIPS16_TLS_GOTTPREL)
+      .Case("R_MIPS16_TLS_DTPREL_HI16",
+            (MCFixupKind)Mips::fixup_MIPS16_TLS_DTPREL_HI16)
+      .Case("R_MIPS16_TLS_DTPREL_LO16",
+            (MCFixupKind)Mips::fixup_MIPS16_TLS_DTPREL_LO16)
+      .Case("R_MIPS16_TLS_GD", (MCFixupKind)Mips::fixup_MIPS16_TLS_GD)
+      .Case("R_MIPS16_TLS_LDM", (MCFixupKind)Mips::fixup_MIPS16_TLS_LDM)
+      .Case("R_MIPS16_TLS_TPREL_HI16",
+            (MCFixupKind)Mips::fixup_MIPS16_TLS_TPREL_HI16)
+      .Case("R_MIPS16_TLS_TPREL_LO16",
+            (MCFixupKind)Mips::fixup_MIPS16_TLS_TPREL_LO16)
       .Case("R_MICROMIPS_CALL16", (MCFixupKind)Mips::fixup_MICROMIPS_CALL16)
       .Case("R_MICROMIPS_GOT_DISP", (MCFixupKind)Mips::fixup_MICROMIPS_GOT_DISP)
       .Case("R_MICROMIPS_GOT_PAGE", (MCFixupKind)Mips::fixup_MICROMIPS_GOT_PAGE)
@@ -398,6 +415,18 @@ getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MIPS_PCHI16",       0,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCLO16",       0,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS16_26",         0,     26,   0 },
+    { "fixup_MIPS16_GPREL",      0,     16,   0 },
+    { "fixup_MIPS16_HI16",       0,     16,   0 },
+    { "fixup_MIPS16_LO16",       0,     16,   0 },
+    { "fixup_MIPS16_GOT16",      0,     16,   0 },
+    { "fixup_MIPS16_CALL16",     0,     16,   0 },
+    { "fixup_MIPS16_TLS_GD",          0,     16,   0 },
+    { "fixup_MIPS16_TLS_LDM",         0,     16,   0 },
+    { "fixup_MIPS16_TLS_DTPREL_HI16", 0,     16,   0 },
+    { "fixup_MIPS16_TLS_DTPREL_LO16", 0,     16,   0 },
+    { "fixup_MIPS16_TLS_GOTTPREL",    0,     16,   0 },
+    { "fixup_MIPS16_TLS_TPREL_HI16",  0,     16,   0 },
+    { "fixup_MIPS16_TLS_TPREL_LO16",  0,     16,   0 },
     { "fixup_MIPS16_PC16_S1",    0,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MICROMIPS_26_S1",   0,     26,   0 },
     { "fixup_MICROMIPS_HI16",    0,     16,   0 },
@@ -479,6 +508,18 @@ getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MIPS_PCHI16",      16,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS_PCLO16",      16,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MIPS16_26",         6,     26,   0 },
+    { "fixup_MIPS16_GPREL",     16,     16,   0 },
+    { "fixup_MIPS16_HI16",      16,     16,   0 },
+    { "fixup_MIPS16_LO16",      16,     16,   0 },
+    { "fixup_MIPS16_GOT16",     16,     16,   0 },
+    { "fixup_MIPS16_CALL16",    16,     16,   0 },
+    { "fixup_MIPS16_TLS_GD",          16,     16,   0 },
+    { "fixup_MIPS16_TLS_LDM",         16,     16,   0 },
+    { "fixup_MIPS16_TLS_DTPREL_HI16", 16,     16,   0 },
+    { "fixup_MIPS16_TLS_DTPREL_LO16", 16,     16,   0 },
+    { "fixup_MIPS16_TLS_GOTTPREL",    16,     16,   0 },
+    { "fixup_MIPS16_TLS_TPREL_HI16",  16,     16,   0 },
+    { "fixup_MIPS16_TLS_TPREL_LO16",  16,     16,   0 },
     { "fixup_MIPS16_PC16_S1",   16,     16,  MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_MICROMIPS_26_S1",   6,     26,   0 },
     { "fixup_MICROMIPS_HI16",   16,     16,   0 },
@@ -523,6 +564,7 @@ getFixupKindInfo(MCFixupKind Kind) const {
 
 unsigned MipsAsmBackend::getRelaxedOpcode(unsigned Op, 
                                           const MCSubtargetInfo &STI) const {
+#warning TODO: What needs to be relaxed here? J instructions? Loads and stores?
   switch (Op) {
   default:
     return Op;
@@ -566,21 +608,6 @@ LLVM_DEBUG(dbgs() << "relaxInstruction\n");
   if (StartingOp != RelaxedOp) {
     Inst.setOpcode(RelaxedOp);
   }
-
-  // switch (StartingOp) {
-  // default:
-  //   return;
-  // case Mips::Bimm16:
-  // {
-  //   MCOperand Operand = Inst.getOperand(0);
-  //   int64_t imm = 0;
-  //   if (!Operand.evaluateAsConstantImm(imm) ||
-  //       imm < -2048 || imm > 2046) {
-  //     Inst.setOpcode(RelaxedOp);
-  //   }
-  //   break;
-  // }
-  // }
 }
 
 
@@ -628,6 +655,15 @@ bool MipsAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   case Mips::fixup_Mips_TPREL_HI:
   case Mips::fixup_Mips_TPREL_LO:
   case Mips::fixup_Mips_JALR:
+  case Mips::fixup_MIPS16_GOT16:
+  case Mips::fixup_MIPS16_CALL16:
+  case Mips::fixup_MIPS16_TLS_GOTTPREL:
+  case Mips::fixup_MIPS16_TLS_DTPREL_HI16:
+  case Mips::fixup_MIPS16_TLS_DTPREL_LO16:
+  case Mips::fixup_MIPS16_TLS_GD:
+  case Mips::fixup_MIPS16_TLS_LDM:
+  case Mips::fixup_MIPS16_TLS_TPREL_HI16:
+  case Mips::fixup_MIPS16_TLS_TPREL_LO16:
   case Mips::fixup_MICROMIPS_CALL16:
   case Mips::fixup_MICROMIPS_GOT_DISP:
   case Mips::fixup_MICROMIPS_GOT_PAGE:
@@ -645,6 +681,7 @@ bool MipsAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   }
 }
 
+#warning TODO: Make a MIPS16 version of this function and figure out where this is used.
 bool MipsAsmBackend::isMicroMips(const MCSymbol *Sym) const {
   if (const auto *ElfSym = dyn_cast<const MCSymbolELF>(Sym)) {
     if (ElfSym->getOther() & ELF::STO_MIPS_MICROMIPS)

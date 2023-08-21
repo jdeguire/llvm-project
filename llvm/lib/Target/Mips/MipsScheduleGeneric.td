@@ -73,13 +73,14 @@ def : InstRW<[GenericWriteALU], (instrs AddiuRxImm16, AddiuRxImmX16,
                                  CmpiRxImm16, CmpiRxImmX16, LiRxImm16,
                                  LiRxImmX16, LiRxImmAlignX16, Move32R16,
                                  MoveR3216, Mfhi16, Mflo16, NegRxRy16,
-                                 NotRxRy16, OrRxRxRy16, SebRx16, SehRx16,
-                                 SllX16, SllvRxRy16, SltiRxImm16, SltiRxImmX16,
-                                 SltiCCRxImmX16, SltiuRxImm16, SltiuRxImmX16,
-                                 SltiuCCRxImmX16, SltRxRy16, SltCCRxRy16,
-                                 SltuRxRy16, SltuRxRyRz16, SltuCCRxRy16,
-                                 SravRxRy16, SraX16, SrlvRxRy16, SrlX16,
-                                 SubuRxRyRz16, XorRxRxRy16, ZebRx16, ZehRx16)>;
+                                 NotRxRy16, OrRxRxRy16, SebRx16, SehRx16, 
+                                 Sll16, SllX16, SllvRxRy16, SltiRxImm16,
+                                 SltiRxImmX16, SltiCCRxImmX16, SltiuRxImm16,
+                                 SltiuRxImmX16, SltiuCCRxImmX16, SltRxRy16,
+                                 SltCCRxRy16, SltuRxRy16, SltuRxRyRz16,
+                                 SltuCCRxRy16, SravRxRy16, Sra16, SraX16, 
+                                 SrlvRxRy16, Srl16, SrlX16, SubuRxRyRz16, 
+                                 XorRxRxRy16, ZebRx16, ZehRx16)>;
 
 def : InstRW<[GenericWriteALU], (instrs Constant32, LwConstant32,
                                  GotPrologue16, CONSTPOOL_ENTRY)>;

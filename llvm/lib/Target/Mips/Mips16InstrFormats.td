@@ -372,16 +372,14 @@ class FI8_MOVR3216<dag outs, dag ins, string asmstr,
                    list<dag> pattern, InstrItinClass itin>:
   MipsInst16<outs, ins, asmstr, pattern, itin>
 {
-
-  bits<4> ry;
-  bits<4> r32;
+  bits<5> r32;
+  bits<3> ry;
 
   let Opcode = 0b01100;
 
   let Inst{10-8} = 0b111;
-  let Inst{7-4} = ry;
-  let Inst{3-0} = r32;
-
+  let Inst{7-5} = ry;
+  let Inst{4-0} = r32;
 }
 
 
@@ -394,11 +392,9 @@ class FI8_MOV32R16<dag outs, dag ins, string asmstr,
                    list<dag> pattern, InstrItinClass itin>:
   MipsInst16<outs, ins, asmstr, pattern, itin>
 {
-
   bits<3>  func;
   bits<5> r32;
   bits<3> rz;
-
 
   let Opcode = 0b01100;
 
@@ -406,7 +402,6 @@ class FI8_MOV32R16<dag outs, dag ins, string asmstr,
   let Inst{7-5} = r32{2-0};
   let Inst{4-3} = r32{4-3};
   let Inst{2-0} = rz;
-
 }
 
 //===----------------------------------------------------------------------===//
@@ -639,23 +634,22 @@ class FEXT_RRI_A16<bits<1> _f, dag outs, dag ins, string asmstr,
 
 //===----------------------------------------------------------------------===//
 // Format EXT-SHIFT instruction class in Mips16 :
-//    <|EXTEND|sa 4:0|s5|0|SHIFT|rx|ry|0|f>
+//    <|EXTEND|sa 4:0|0|SHIFT|rx|ry|0|f>
 //===----------------------------------------------------------------------===//
 
 class FEXT_SHIFT16<bits<2> _f, dag outs, dag ins, string asmstr,
                    list<dag> pattern, InstrItinClass itin>:
   MipsInst16_EXTEND<outs, ins, asmstr, pattern, itin>
 {
-  bits<6> sa6;
+  bits<6> sa;
   bits<3> rx;
   bits<3> ry;
   bits<2> f;
 
   let f = _f;
 
-  let Inst{26-22} = sa6{4-0};
-  let Inst{21} = sa6{5};
-  let Inst{20-16} = 0;
+  let Inst{26-22} = sa{4-0};
+  let Inst{21-16} = 0;
   let Inst{15-11} = 0b00110;
   let Inst{10-8} = rx;
   let Inst{7-5} = ry;
@@ -678,7 +672,7 @@ class FEXT_I816<bits<3> _funct, dag outs, dag ins, string asmstr,
   bits<3> funct;
 
   let funct = _funct;
-  let I8 = 0b00110;
+  let I8 = 0b01100;
 
   let Inst{26-21} = imm16{10-5};
   let Inst{20-16} = imm16{15-11};

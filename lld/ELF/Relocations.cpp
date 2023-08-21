@@ -163,6 +163,8 @@ static RelType getMipsPairType(RelType type, bool isLocal) {
     // relocations handle low 16 bits of the address. That allows
     // to allocate only one GOT entry for every 64 KBytes of local data.
     return isLocal ? R_MIPS_LO16 : R_MIPS_NONE;
+  case R_MIPS16_GOT16:
+    return isLocal ? R_MIPS16_LO16 : R_MIPS_NONE;
   case R_MICROMIPS_GOT16:
     return isLocal ? R_MICROMIPS_LO16 : R_MIPS_NONE;
   case R_MIPS_PCHI16:

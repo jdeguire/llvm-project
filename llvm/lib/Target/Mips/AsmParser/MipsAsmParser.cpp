@@ -883,8 +883,8 @@ private:
   };
 
   struct SaveRestoreOp {
-    unsigned CallerSavedMask;
-    unsigned CalleeSavedMask;
+    unsigned SavedRegsMask;
+    unsigned StaticRegsMask;
     unsigned Framesize;
   };
 
@@ -1350,7 +1350,7 @@ public:
                   : Mips::GPR32RegClassID);
     auto &RegClass = AsmParser.getContext().getRegisterInfo()->getRegClass(RC);
 
-    auto Mask = getSaveRestoreCallerSavedRegs();
+    auto Mask = getSaveRestoreSavedRegs();
     while (Mask) {
       unsigned RegNo = RegClass.getRegister(findFirstSet(Mask));
       Inst.addOperand(MCOperand::createReg(RegNo));
@@ -1359,7 +1359,7 @@ public:
 
     Inst.addOperand(MCOperand::createImm(getSaveRestoreFramesize()));
 
-    Mask = getSaveRestoreCalleeSavedRegs();
+    Mask = getSaveRestoreStaticRegs();
     while (Mask) {
       unsigned RegNo = RegClass.getRegister(findFirstSet(Mask));
       Inst.addOperand(MCOperand::createReg(RegNo));
@@ -1584,11 +1584,11 @@ public:
     if (SaveRestore.Framesize == 0 ||  SaveRestore.Framesize > 128)
       return false;
 
-    if (SaveRestore.CalleeSavedMask != 0)
+    if (SaveRestore.StaticRegsMask != 0)
       return false;
 
     // The 16-bit instruction can save only regs $16, $17, and $31.
-    if (SaveRestore.CallerSavedMask & ~0x80030000)
+    if (SaveRestore.SavedRegsMask & ~0x80030000)
       return false;
 
     return true;
@@ -1654,14 +1654,14 @@ public:
     return *(RegList.List);
   }
 
-  unsigned getSaveRestoreCallerSavedRegs() const {
+  unsigned getSaveRestoreSavedRegs() const {
     assert((Kind == k_SaveRestore) && "Invalid access!");
-    return SaveRestore.CallerSavedMask;
+    return SaveRestore.SavedRegsMask;
   }
 
-  unsigned getSaveRestoreCalleeSavedRegs() const {
+  unsigned getSaveRestoreStaticRegs() const {
     assert((Kind == k_SaveRestore) && "Invalid access!");
-    return SaveRestore.CalleeSavedMask;
+    return SaveRestore.StaticRegsMask;
   }
 
   unsigned getSaveRestoreFramesize() const {
@@ -1777,12 +1777,12 @@ public:
   }
 
   static std::unique_ptr<MipsOperand>
-  CreateSaveRestore(unsigned CallerSavedMask, unsigned CalleeSavedMask, 
+  CreateSaveRestore(unsigned SavedRegsMask, unsigned StaticRegsMask, 
                     unsigned Framesize, SMLoc StartLoc, SMLoc EndLoc,
                     MipsAsmParser &Parser) {
     auto Op = std::make_unique<MipsOperand>(k_SaveRestore, Parser);
-    Op->SaveRestore.CallerSavedMask = CallerSavedMask;
-    Op->SaveRestore.CalleeSavedMask = CalleeSavedMask;
+    Op->SaveRestore.SavedRegsMask = SavedRegsMask;
+    Op->SaveRestore.StaticRegsMask = StaticRegsMask;
     Op->SaveRestore.Framesize = Framesize;
     Op->StartLoc = StartLoc;
     Op->EndLoc = EndLoc;
@@ -1961,9 +1961,9 @@ public:
       break;
     case k_SaveRestore:
       OS << "SaveRestore<CallerSaved 0x";
-      OS.write_hex(SaveRestore.CallerSavedMask);
+      OS.write_hex(SaveRestore.SavedRegsMask);
       OS << ", Framesize " << SaveRestore.Framesize << ", CalleeSaved 0x";
-      OS.write_hex(SaveRestore.CalleeSavedMask);
+      OS.write_hex(SaveRestore.StaticRegsMask);
       OS <<  ">";
       break;
     }
@@ -6328,6 +6328,7 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 //  case Match_SImm8_Lsl1:
 //    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
 //                 "expected both 9-bit signed immediate and multiple of 2");
+#warning TODO: Check td file for types not here and see if I need to add them, like uimm8_lsl2 and uimm3_shift
   case Match_SImm8_Lsl3:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected both 11-bit signed immediate and multiple of 8");
@@ -7189,9 +7190,9 @@ OperandMatchResultTy
 MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
   MCAsmParser &Parser = getParser();
   SMLoc OperandsStart = Parser.getTok().getLoc();
-  uint32_t CallerRegMask = 0;
-  uint32_t CalleeRegMask = 0;
-  uint32_t *RegMaskPtr = &CallerRegMask;
+  uint32_t SavedRegMask = 0;
+  uint32_t StaticRegMask = 0;
+  uint32_t *RegMaskPtr = &SavedRegMask;
   unsigned PrevRegIndex = 0;
   unsigned Framesize = 0;
   bool FramesizeSet = false;
@@ -7199,12 +7200,12 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
   const llvm::MCRegisterInfo *RegInfo = getContext().getRegisterInfo();
 
   // MIPS16 Save and Restore instructions are weird and the MIPS16 docs do
-  // not provide useful syntax info. This will use the GNU AS syntax:
+  // not provide useful syntax info. This will a syntax similar to GNU AS:
   // 
-  //   save/restore {caller-saved regs}, frame size, {callee-saved regs}
+  //   save/restore {saved aregs and sregs}, frame size, {static aregs}
   //
-  // where the caller- and callee-saved regs are register lists and the
-  // frame size is a mulitple of 8 from 0 to 2040.
+  // where the saved and static regs are register lists and the frame size
+  // is a mulitple of 8 from 0 to 2040.
 
   SMLoc TokStart;
   SMLoc TokEnd;
@@ -7213,7 +7214,7 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
     TokEnd = TokStart;
 
     if (Parser.getTok().is(AsmToken::Dollar)) {
-      unsigned RegNo;
+      unsigned RegNo = (unsigned)-1;
       if (ParseRegister(RegNo, TokStart, TokEnd)) {
         Error(TokEnd, "expected register operand");
         return MatchOperand_ParseFail;
@@ -7244,9 +7245,9 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
     } else {
       // If it's not a register, try parsing this as an expression for
       // presumably the frame size. Any args after the frame size are
-      // callee-saved registers.
+      // static registers.
       if (FramesizeSet) {
-        Error(TokEnd, "expected callee-saved register");
+        Error(TokEnd, "expected static register");
         return MatchOperand_ParseFail;
       }
 
@@ -7267,7 +7268,7 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
         Error(TokEnd, "frame size must be in range 0 .. 2040 and a multiple of 8");
       }
 
-      RegMaskPtr = &CalleeRegMask;
+      RegMaskPtr = &StaticRegMask;
       Framesize = (unsigned)FramesizeVal;
       FramesizeSet = true;
     }
@@ -7289,21 +7290,21 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
 
   TokEnd = Parser.getTok().getLoc();
 
-  if (CallerRegMask & ~0xC0FF00F0) {
-    Error(TokEnd, "only registers $4-7, $16-23, $30, and $31 can be caller-saved");
+  if (SavedRegMask & ~0xC0FF00F0) {
+    Error(TokEnd, "only registers $4-7, $16-23, $30, and $31 can be used");
     return MatchOperand_ParseFail;
   }
-  if (CalleeRegMask & ~0xF0) {
-    Error(TokEnd, "only registers $4-7 can be callee-saved");
+  if (StaticRegMask & ~0xF0) {
+    Error(TokEnd, "only registers $4-7 can be saved as static registers");
     return MatchOperand_ParseFail;
   }
-  if (CallerRegMask & CalleeRegMask) {
-    Error(TokEnd, "registers cannot be in both callee- and caller-saved lists");
+  if (SavedRegMask & StaticRegMask) {
+    Error(TokEnd, "registers cannot be both in saved and static lists");
     return MatchOperand_ParseFail;
   }
 
   Operands.push_back(
-      MipsOperand::CreateSaveRestore(CallerRegMask, CalleeRegMask, Framesize,
+      MipsOperand::CreateSaveRestore(SavedRegMask, StaticRegMask, Framesize,
                                      OperandsStart, TokEnd, *this));
   return MatchOperand_Success;
 }

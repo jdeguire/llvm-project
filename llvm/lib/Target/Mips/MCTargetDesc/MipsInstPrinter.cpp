@@ -86,6 +86,7 @@ void MipsInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     O << "\t.set\tpush\n";
     O << "\t.set\tmips32r2\n";
     break;
+#warning TODO: Remove this?
 #if 0
   case Mips::Save16:
     O << "\tsave\t";
@@ -362,11 +363,10 @@ void MipsInstPrinter::printSaveRestore(const MCInst *MI, int opNum,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
   for (int i = opNum, e = MI->getNumOperands(); i != e; ++i) {
-    if (i != opNum) O << ", ";
-    if (MI->getOperand(i).isReg())
-      printRegName(O, MI->getOperand(i).getReg());
-    else
-      printUImm<16>(MI, i, STI, O);
+    if (i != opNum)
+      O << ", ";
+
+    printOperand(MI, i, STI, O);
   }
 }
 

@@ -1106,6 +1106,12 @@ uint32_t RuntimeDyldELF::getMatchingLoRelocation(uint32_t RelType,
     return ELF::R_MIPS_LO16;
   case ELF::R_MIPS_PCHI16:
     return ELF::R_MIPS_PCLO16;
+  case ELF::R_MIPS16_GOT16:
+    if (IsLocal)
+      return ELF::R_MIPS16_LO16;
+    break;
+  case ELF::R_MIPS16_HI16:
+    return ELF::R_MIPS16_LO16;
   default:
     break;
   }

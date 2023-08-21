@@ -390,6 +390,30 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
     return ELF::R_MICROMIPS_JALR;
   case Mips::fixup_MIPS16_26:
     return ELF::R_MIPS16_26;
+  case Mips::fixup_MIPS16_GPREL:
+    return ELF::R_MIPS16_GPREL;
+  case Mips::fixup_MIPS16_HI16:
+    return ELF::R_MIPS16_HI16;
+  case Mips::fixup_MIPS16_LO16:
+    return ELF::R_MIPS16_LO16;
+  case Mips::fixup_MIPS16_GOT16:
+    return ELF::R_MIPS16_GOT16;
+  case Mips::fixup_MIPS16_CALL16:
+    return ELF::R_MIPS16_CALL16;
+  case Mips::fixup_MIPS16_TLS_GD:
+    return ELF::R_MIPS16_TLS_GD;
+  case Mips::fixup_MIPS16_TLS_LDM:
+    return ELF::R_MIPS16_TLS_LDM;
+  case Mips::fixup_MIPS16_TLS_DTPREL_HI16:
+    return ELF::R_MIPS16_TLS_DTPREL_HI16;
+  case Mips::fixup_MIPS16_TLS_DTPREL_LO16:
+    return ELF::R_MIPS16_TLS_DTPREL_LO16;
+  case Mips::fixup_MIPS16_TLS_GOTTPREL:
+    return ELF::R_MIPS16_TLS_GOTTPREL;
+  case Mips::fixup_MIPS16_TLS_TPREL_HI16:
+    return ELF::R_MIPS16_TLS_TPREL_HI16;
+  case Mips::fixup_MIPS16_TLS_TPREL_LO16:
+    return ELF::R_MIPS16_TLS_TPREL_LO16;
   }
 
   llvm_unreachable("invalid fixup kind!");
@@ -614,6 +638,17 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MIPS_NUM:
   case ELF::R_MIPS_PC32:
   case ELF::R_MIPS_EH:
+  case ELF::R_MIPS16_26:
+  case ELF::R_MIPS16_GPREL:
+  case ELF::R_MIPS16_CALL16:
+  case ELF::R_MIPS16_TLS_GD:
+  case ELF::R_MIPS16_TLS_LDM:
+  case ELF::R_MIPS16_TLS_DTPREL_HI16:
+  case ELF::R_MIPS16_TLS_DTPREL_LO16:
+  case ELF::R_MIPS16_TLS_GOTTPREL:
+  case ELF::R_MIPS16_TLS_TPREL_HI16:
+  case ELF::R_MIPS16_TLS_TPREL_LO16:
+  case ELF::R_MIPS16_PC16_S1:
   case ELF::R_MICROMIPS_26_S1:
   case ELF::R_MICROMIPS_GPREL16:
   case ELF::R_MICROMIPS_LITERAL:
@@ -646,24 +681,10 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MICROMIPS_PC18_S3:
   case ELF::R_MICROMIPS_PC19_S2:
     return true;
-
-  // FIXME: Many of these should probably return false but MIPS16 isn't
-  //        supported by the integrated assembler.
-  case ELF::R_MIPS16_GPREL:
-  case ELF::R_MIPS16_CALL16:
-  case ELF::R_MIPS16_TLS_GD:
-  case ELF::R_MIPS16_TLS_LDM:
-  case ELF::R_MIPS16_TLS_DTPREL_HI16:
-  case ELF::R_MIPS16_TLS_DTPREL_LO16:
-  case ELF::R_MIPS16_TLS_GOTTPREL:
-  case ELF::R_MIPS16_TLS_TPREL_HI16:
-  case ELF::R_MIPS16_TLS_TPREL_LO16:
-    llvm_unreachable("Unsupported MIPS16 relocation");
-  case ELF::R_MIPS16_26:
-  case ELF::R_MIPS16_PC16_S1:
-    return true;
   }
 }
+
+#warning TODO: Search for fixup_MICROMIPS stuff to see where and how they are used.
 
 std::unique_ptr<MCObjectTargetWriter>
 llvm::createMipsELFObjectWriter(const Triple &TT, bool IsN32) {

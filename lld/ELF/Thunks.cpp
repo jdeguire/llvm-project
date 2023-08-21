@@ -220,6 +220,8 @@ public:
   InputSection *getTargetInputSection() const override;
 };
 
+#warning TODO: Do I need to add a Thunk class for MIPS16? Probably...
+
 // microMIPS R2-R5 LA25 thunk
 class MicroMipsThunk final : public Thunk {
 public:

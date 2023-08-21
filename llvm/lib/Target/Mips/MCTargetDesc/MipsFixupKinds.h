@@ -151,6 +151,42 @@ namespace Mips {
     // resulting in - R_MIPS16_26
     fixup_MIPS16_26,
 
+    // resulting in - R_MIPS16_GPREL
+    fixup_MIPS16_GPREL,
+
+    // resulting in - R_MIPS16_HI16
+    fixup_MIPS16_HI16,
+
+    // resulting in - R_MIPS16_LO16
+    fixup_MIPS16_LO16,
+
+    // resulting in - R_MIPS16_GOT16
+    fixup_MIPS16_GOT16,
+
+    // resulting in - R_MIPS16_CALL16
+    fixup_MIPS16_CALL16,
+
+    // resulting in - R_MIPS16_TLS_GD
+    fixup_MIPS16_TLS_GD,
+
+    // resulting in - R_MIPS16_TLS_LDM
+    fixup_MIPS16_TLS_LDM,
+
+    // resulting in - R_MIPS16_TLS_DTPREL_HI16
+    fixup_MIPS16_TLS_DTPREL_HI16,
+
+    // resulting in - R_MIPS16_TLS_DTPREL_LO16
+    fixup_MIPS16_TLS_DTPREL_LO16,
+
+    // resulting in - R_MIPS16_TLS_GOTTPREL.
+    fixup_MIPS16_TLS_GOTTPREL,
+
+    // resulting in - R_MIPS16_TLS_TPREL_HI16
+    fixup_MIPS16_TLS_TPREL_HI16,
+
+    // resulting in - R_MIPS16_TLS_TPREL_LO16
+    fixup_MIPS16_TLS_TPREL_LO16,
+
     // resulting in - R_MIPS16_PC16_S1
     fixup_MIPS16_PC16_S1,
 

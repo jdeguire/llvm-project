@@ -664,9 +664,15 @@ uint64_t InputSectionBase::getRelocTargetVA(const InputFile *file, RelType type,
     // expressions: AHL + GP - P + 3 for %lo() and AHL + GP - P - 1 for %hi()
     // to correctly handle less-significant bit of the microMIPS symbol.
     uint64_t v = in.mipsGot->getGp(file) + a - p;
-    if (type == R_MIPS_LO16 || type == R_MICROMIPS_LO16)
+    bool isAnyMipsLo = (type == R_MIPS_LO16 ||
+                       type == R_MICROMIPS_LO16 ||
+                       type == R_MIPS16_LO16);
+    bool isMicromipsHiLo = (type == R_MICROMIPS_LO16 || 
+                              type == R_MICROMIPS_HI16);
+    bool isMips16HiLo = (type == R_MIPS16_LO16 || type == R_MIPS16_HI16);
+    if (isAnyMipsLo)
       v += 4;
-    if (type == R_MICROMIPS_LO16 || type == R_MICROMIPS_HI16)
+    if (isMicromipsHiLo || isMips16HiLo)
       v -= 1;
     return v;
   }

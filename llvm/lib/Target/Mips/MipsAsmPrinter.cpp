@@ -776,6 +776,16 @@ printFCCOperand(const MachineInstr *MI, int opNum, raw_ostream &O,
 }
 
 void MipsAsmPrinter::
+printSaveRestore(const MachineInstr *MI, int opNum, raw_ostream &O) {
+  for (int i = opNum, e = MI->getNumOperands(); i != e; ++i) {
+    if (i != opNum)
+      O << ", ";
+
+    printOperand(MI, i, O);
+  }
+}
+
+void MipsAsmPrinter::
 printRegisterList(const MachineInstr *MI, int opNum, raw_ostream &O) {
   for (int i = opNum, e = MI->getNumOperands(); i != e; ++i) {
     if (i != opNum) O << ", ";

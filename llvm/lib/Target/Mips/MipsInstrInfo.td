@@ -849,8 +849,10 @@ def ConstantUImm4AsmOperandClass
     : ConstantUImmAsmOperandClass<4, [ConstantSImm5AsmOperandClass]>;
 def ConstantSImm4AsmOperandClass
     : ConstantSImmAsmOperandClass<4, [ConstantUImm4AsmOperandClass]>;
+def ConstantUImm3Plus1AsmOperandClass
+    : ConstantUImmAsmOperandClass<3, [ConstantSImm4AsmOperandClass], 1>;
 def ConstantUImm3AsmOperandClass
-    : ConstantUImmAsmOperandClass<3, [ConstantSImm4AsmOperandClass]>;
+    : ConstantUImmAsmOperandClass<3, [ConstantUImm3Plus1AsmOperandClass]>;
 def ConstantUImm2Plus1AsmOperandClass
     : ConstantUImmAsmOperandClass<2, [ConstantUImm3AsmOperandClass], 1>;
 def ConstantUImm2AsmOperandClass
@@ -942,6 +944,14 @@ def uimm2_plus1 : Operand<i32> {
   let EncoderMethod = "getUImmWithOffsetEncoding<2, 1>";
   let DecoderMethod = "DecodeUImmWithOffset<2, 1>";
   let ParserMatchClass = ConstantUImm2Plus1AsmOperandClass;
+}
+
+// A 3-bit shift value for MIPS16 and MicroMIPS 16-bit instructions in which
+// a shift amount of 8 is encoded as 0.
+def uimm3_shift : Operand<i32> {
+  let EncoderMethod = "getUImm3ShiftEncoding";
+  let DecoderMethod = "DecodeUImm3Shift";
+  let ParserMatchClass = ConstantUImm3Plus1AsmOperandClass;
 }
 
 def uimm5_plus1 : Operand<i32> {

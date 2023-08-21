@@ -103,12 +103,13 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
     return R_NONE;
   case R_MIPS_GPREL16:
   case R_MIPS_GPREL32:
+  case R_MIPS16_GPREL:
   case R_MICROMIPS_GPREL16:
   case R_MICROMIPS_GPREL7_S2:
     return R_MIPS_GOTREL;
   case R_MIPS_26:
-  case R_MICROMIPS_26_S1:
   case R_MIPS16_26:
+  case R_MICROMIPS_26_S1:
     return R_PLT;
   case R_MICROMIPS_PC26_S1:
     return R_PLT_PC;
@@ -116,6 +117,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_LO16:
   case R_MIPS_HIGHER:
   case R_MIPS_HIGHEST:
+  case R_MIPS16_HI16:
+  case R_MIPS16_LO16:
   case R_MICROMIPS_HI16:
   case R_MICROMIPS_LO16:
     // R_MIPS_HI16/R_MIPS_LO16 relocations against _gp_disp calculate
@@ -136,6 +139,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_TLS_DTPREL_LO16:
   case R_MIPS_TLS_DTPREL32:
   case R_MIPS_TLS_DTPREL64:
+  case R_MIPS16_TLS_DTPREL_HI16:
+  case R_MIPS16_TLS_DTPREL_LO16:
   case R_MICROMIPS_TLS_DTPREL_HI16:
   case R_MICROMIPS_TLS_DTPREL_LO16:
     return R_DTPREL;
@@ -143,6 +148,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_TLS_TPREL_LO16:
   case R_MIPS_TLS_TPREL32:
   case R_MIPS_TLS_TPREL64:
+  case R_MIPS16_TLS_TPREL_HI16:
+  case R_MIPS16_TLS_TPREL_LO16:
   case R_MICROMIPS_TLS_TPREL_HI16:
   case R_MICROMIPS_TLS_TPREL_LO16:
     return R_TPREL;
@@ -163,6 +170,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_PC21_S1:
     return R_PC;
   case R_MIPS_GOT16:
+  case R_MIPS16_GOT16:
   case R_MICROMIPS_GOT16:
     if (s.isLocal())
       return R_MIPS_GOT_LOCAL_PAGE;
@@ -170,6 +178,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_CALL16:
   case R_MIPS_GOT_DISP:
   case R_MIPS_TLS_GOTTPREL:
+  case R_MIPS16_CALL16:
+  case R_MIPS16_TLS_GOTTPREL:
   case R_MICROMIPS_CALL16:
   case R_MICROMIPS_TLS_GOTTPREL:
     return R_MIPS_GOT_OFF;
@@ -185,9 +195,11 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_GOT_PAGE:
     return R_MIPS_GOT_LOCAL_PAGE;
   case R_MIPS_TLS_GD:
+  case R_MIPS16_TLS_GD:
   case R_MICROMIPS_TLS_GD:
     return R_MIPS_TLSGD;
   case R_MIPS_TLS_LDM:
+  case R_MIPS16_TLS_LDM:
   case R_MICROMIPS_TLS_LDM:
     return R_MIPS_TLSLD;
   case R_MIPS_NONE:
@@ -529,6 +541,20 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
     return 0;
   case R_MIPS16_26:
     return SignExtend64<28>(readMips16JalValue(buf) << 2);
+  case R_MIPS16_GOT16:
+  case R_MIPS16_HI16:
+    return SignExtend64<16>(readMips16ExtendValue(buf)) << 16;
+  case R_MIPS16_CALL16:
+  case R_MIPS16_LO16:
+  case R_MIPS16_GPREL:
+  case R_MIPS16_TLS_DTPREL_HI16:
+  case R_MIPS16_TLS_DTPREL_LO16:
+  case R_MIPS16_TLS_GD:
+  case R_MIPS16_TLS_GOTTPREL:
+  case R_MIPS16_TLS_LDM:
+  case R_MIPS16_TLS_TPREL_HI16:
+  case R_MIPS16_TLS_TPREL_LO16:
+    return SignExtend64<16>(readMips16ExtendValue(buf));
   case R_MIPS16_PC16_S1:
     return SignExtend64<17>(readMips16ExtendValue(buf) << 1);
   default:
@@ -652,6 +678,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   // https://www.linux-mips.org/wiki/NPTL
   if (type == R_MIPS_TLS_DTPREL_HI16 || type == R_MIPS_TLS_DTPREL_LO16 ||
       type == R_MIPS_TLS_DTPREL32 || type == R_MIPS_TLS_DTPREL64 ||
+      type == R_MIPS16_TLS_DTPREL_HI16 || type == R_MIPS16_TLS_DTPREL_LO16 ||
       type == R_MICROMIPS_TLS_DTPREL_HI16 ||
       type == R_MICROMIPS_TLS_DTPREL_LO16) {
     val -= 0x8000;
@@ -825,6 +852,32 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MIPS16_26:
     writeMips16JalValue(loc, val >> 2);
     break;
+  case R_MIPS16_GOT16:
+    if (config->relocatable) {
+      writeMips16ExtendValue(loc, (val + 0x8000) >> 16);
+    } else {
+      checkInt(loc, val, 16, rel);
+      writeMips16ExtendValue(loc, val);
+    }
+    break;
+  case R_MIPS16_GPREL:
+  case R_MIPS16_TLS_GD:
+  case R_MIPS16_TLS_LDM:
+    checkInt(loc, val, 16, rel);
+    writeMips16ExtendValue(loc, val);
+    break;
+  case R_MIPS16_CALL16:
+  case R_MIPS16_LO16:
+  case R_MIPS16_TLS_DTPREL_LO16:
+  case R_MIPS16_TLS_GOTTPREL:
+  case R_MIPS16_TLS_TPREL_LO16:
+    writeMips16ExtendValue(loc, val);
+    break;
+  case R_MIPS16_HI16:
+  case R_MIPS16_TLS_DTPREL_HI16:
+  case R_MIPS16_TLS_TPREL_HI16:
+    writeMips16ExtendValue(loc, (val + 0x8000) >> 16);
+    break;
   case R_MIPS16_PC16_S1:
     checkInt(loc, val, 17, rel);
     writeMips16ExtendValue(loc, val >> 1);
@@ -836,7 +889,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
 
 template <class ELFT> bool MIPS<ELFT>::usesOnlyLowPageBits(RelType type) const {
   return type == R_MIPS_LO16 || type == R_MIPS_GOT_OFST ||
-         type == R_MICROMIPS_LO16;
+         type == R_MICROMIPS_LO16 || type == R_MIPS16_LO16;
 }
 
 // Return true if the symbol is a PIC function.

@@ -32,6 +32,7 @@ class MipsMCCodeEmitter : public MCCodeEmitter {
   MCContext &Ctx;
   bool IsLittleEndian;
 
+  bool isMips16(const MCSubtargetInfo &STI) const;
   bool isMicroMips(const MCSubtargetInfo &STI) const;
   bool isMips32r6(const MCSubtargetInfo &STI) const;
 
@@ -293,7 +294,7 @@ public:
                                  SmallVectorImpl<MCFixup> &Fixups,
                                  const MCSubtargetInfo &STI) const;
 
-  unsigned getUImm3Mod8Encoding(const MCInst &MI, unsigned OpNo,
+  unsigned getUImm3ShiftEncoding(const MCInst &MI, unsigned OpNo,
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
   unsigned getUImm4AndValue(const MCInst &MI, unsigned OpNo,

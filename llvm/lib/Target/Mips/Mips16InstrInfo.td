@@ -334,7 +334,12 @@ class FI816_SP_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
 class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd, 
                    InstrItinClass itin>:
   FI816<_func, (outs), (ins RAPseudoReg:$pseudo, MemOpnd:$addr),
-        !strconcat(asmstr, "\t$pseudo, $addr"), [], itin>;
+        !strconcat(asmstr, "\t$pseudo, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only 8 bits of the offset.
+  bits<8> addr;
+  let imm8 = addr{7-0};
+}
 
 //
 // RI instruction format
@@ -346,10 +351,10 @@ class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd,
 //        !strconcat(asmstr, asmstr2), [], itin>;
 
 // TODO: Can I merge this with the PC and SP versions below by specifying operand type in declaration?
-class FRI16_ins<bits<5> op, string asmstr, InstrItinClass itin>:
-  FRI16<op, (outs CPU16Opnd:$rx), (ins simm8:$imm),
-        !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
-//  FRI16_ins_base<op, asmstr, "\t$rx, $imm", itin>;
+class FRI16_ins<bits<5> op, string asmstr, Operand ImmOpnd, InstrItinClass itin>:
+  FRI16<op, (outs CPU16Opnd:$rx), (ins ImmOpnd:$imm8),
+        !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
+//  FRI16_ins_base<op, asmstr, "\t$rx, $imm8", itin>;
 
 class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm, i32imm:$size),
@@ -370,6 +375,7 @@ class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   let Constraints = "$rx_ = $rx";
 }
 
+// TODO: Can I merge these two by specifying the pseudo type like I do with the operand type?
 class FRI16_PC_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
                     InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, ImmOpnd:$imm8),
@@ -385,6 +391,7 @@ class FRI16_B_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget8_mips16:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
+// TODO: Can I remove FRI16_mem and use FRI16 instead if I use something like "let imm8 = addr{7-0}"?
 class FRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FRI16_mem<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
@@ -404,9 +411,17 @@ class FRRI_A16_ins<bits<1> _f, string asmstr, InstrItinClass itin>:
            !strconcat(asmstr, "\t$ry, $rx, $imm4"), [], itin>;
 
 //
+// SHIFT instruction format
+//
+class FSHIFT16_ins<bits<2> _f, string asmstr, InstrItinClass itin>:
+  FSHIFT16<_f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry, uimm3_shift:$sa),
+               !strconcat(asmstr, "\t$rx, $ry, $sa"), [], itin>;
+
+//
 // RRI memory instruction formats
 //
 
+// TODO: Can I remove FRRI16_mem and use FRRI16 instead if I use "let" to set "rx" and "imm5" to parts of "addr"?
 class FRRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FRRI16_mem<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
@@ -491,7 +506,12 @@ class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
 class FEXT_I816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd,
                        InstrItinClass itin>:
   FEXT_I816<_func, (outs), (ins RAPseudoReg:$pseudo, MemOpnd:$addr),
-            !strconcat(asmstr, "\t$pseudo, $addr"), [], itin>;
+            !strconcat(asmstr, "\t$pseudo, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only the 16-bit offset.
+  bits<16> addr;
+  let imm16 = addr{15-0};
+}
 
 //
 // Assembler formats in alphabetical order.
@@ -562,6 +582,7 @@ class FEXT_2RI16_ins<bits<5> _op, string asmstr,
 // EXT-RI memory instruction formats
 //
 
+// TODO: Can I remove FEXT_RI16_mem and use FEXT_RI16 instead by using "let" to set "imm16" to the offset in "addr"?
 class FEXT_RI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FEXT_RI16_mem<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
@@ -576,6 +597,7 @@ class FEXT_RI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
 // EXT-RRI memory instruction formats
 //
 
+// TODO: Can I remove FEXT_RRI16_mem and use FEXT_RRI16 instead by using "let" to set "imm16" and "rx" to the offset and reg in "addr"?
 class FEXT_RRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FEXT_RRI16_mem<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
@@ -706,7 +728,9 @@ class FUnaryRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
 class FRR16_M_ins<bits<5> f, string asmstr,
                   InstrItinClass itin> :
   FRR16<f, (outs CPU16Opnd:$rx), (ins),
-        !strconcat(asmstr, "\t$rx"), [], itin>;
+        !strconcat(asmstr, "\t$rx"), [], itin> {
+  let ry = 0;
+}
 
 class FRxRxRy16_ins<bits<5> f, string asmstr,
                     InstrItinClass itin> :
@@ -880,7 +904,7 @@ class MayStore {
 // To add a constant to a 32-bit integer.
 //
 def AddiuRxImm16: 
-  FRI16_ins<0b01001, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
+  FRI16_ins<0b01001, "addiu", simm8, IIM16Alu>, ArithLogic16Defs<0>;
 
 def AddiuRxImmX16:
   FEXT_RI16_ins<0b01001, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
@@ -931,7 +955,7 @@ def AddiuRxPcImmX16:
 // To add a constant to the stack pointer.
 //
 def AddiuRxSpImm16:
-  FRI16_SP_ins<0b00000, "addiu", simm8_lsl3, IIM16Alu> {
+  FRI16_SP_ins<0b00000, "addiu", uimm8_lsl2, IIM16Alu> {
     let Defs = [SP];
     let Uses = [SP];
 }
@@ -1333,7 +1357,7 @@ def LhuRxRyOffMemX16:
 // Purpose: Load Immediate
 // To load a constant into a GPR.
 //
-def LiRxImm16: FRI16_ins<0b01101, "li", IIM16Alu>;
+def LiRxImm16: FRI16_ins<0b01101, "li", uimm8, IIM16Alu>;
 
 //
 // Format: LI rx, immediate MIPS16e
@@ -1489,7 +1513,7 @@ def MultuRxRyRz16: FMULT16_LO_ins<"multu"> {
 // Purpose: Negate
 // To negate an integer value.
 //
-def NegRxRy16: FUnaryRR16_ins<0b11101, "neg", IIM16Alu>;
+def NegRxRy16: FUnaryRR16_ins<0b01011, "neg", IIM16Alu>;
 
 //
 // Format: NOT rx, ry MIPS16e
@@ -1723,6 +1747,13 @@ def ShRxRyOffMemX16:
 
 //
 // Format: SLL rx, ry, sa MIPS16e
+// Purpose: Shift Word Left Logical
+// To execute a left-shift of a word by a fixed number of bits-1 to 8 bits.
+//
+def Sll16: FSHIFT16_ins<0b00, "sll", IIM16Alu>;
+
+//
+// Format: SLL rx, ry, sa MIPS16e
 // Purpose: Shift Word Left Logical (Extended)
 // To execute a left-shift of a word by a fixed number of bits-0 to 31 bits.
 //
@@ -1815,15 +1846,37 @@ def SltuCCRxRy16: FCCRR16_ins<"sltu">;
 //
 def SravRxRy16: FRxRxRy16_ins<0b00111, "srav", IIM16Alu>;
 
+//
+// Format: SRA rx, ry, sa MIPS16e
+// Purpose: Shift Word Right Arithmetic
+// To execute an arithmetic right-shift of a word by a fixed
+// number of bits-1 to 8 bits.
+//
+def Sra16: FSHIFT16_ins<0b11, "sra", IIM16Alu>;
 
 //
 // Format: SRA rx, ry, sa MIPS16e
 // Purpose: Shift Word Right Arithmetic (Extended)
 // To execute an arithmetic right-shift of a word by a fixed
-// number of bits-1 to 8 bits.
+// number of bits-0 to 31 bits.
 //
 def SraX16: FEXT_SHIFT16_ins<0b11, "sra", IIM16Alu>;
 
+//
+// Format: SRL rx, ry, sa MIPS16e
+// Purpose: Shift Word Right Logical
+// To execute a logical right-shift of a word by a fixed
+// number of bits-1 to 8 bits.
+//
+def Srl16: FSHIFT16_ins<0b10, "srl", IIM16Alu>;
+
+//
+// Format: SRL rx, ry, sa MIPS16e
+// Purpose: Shift Word Right Logical (Extended)
+// To execute a logical right-shift of a word by a fixed
+// number of bits-0 to 31 bits.
+//
+def SrlX16: FEXT_SHIFT16_ins<0b10, "srl", IIM16Alu>;
 
 //
 // Format: SRLV ry, rx MIPS16e
@@ -1832,15 +1885,6 @@ def SraX16: FEXT_SHIFT16_ins<0b11, "sra", IIM16Alu>;
 // number of bits.
 //
 def SrlvRxRy16: FRxRxRy16_ins<0b00110, "srlv", IIM16Alu>;
-
-
-//
-// Format: SRL rx, ry, sa MIPS16e
-// Purpose: Shift Word Right Logical (Extended)
-// To execute a logical right-shift of a word by a fixed
-// number of bits-1 to 31 bits.
-//
-def SrlX16: FEXT_SHIFT16_ins<0b10, "srl", IIM16Alu>;
 
 //
 // Format: SUBU rz, rx, ry MIPS16e
@@ -2167,6 +2211,7 @@ def: Mips16Pat
 
 def: UncondBranch16_pat<br, Bimm16>;
 
+// TODO: Are then sign and zero extending 16-bit values? Wouldn't SEH and ZEH do it?
 // Small immediates
 def: Mips16Pat<(i32 immSExt16:$in),
                (AddiuRxRxImmX16 (MoveR3216 ZERO), immSExt16:$in)>;

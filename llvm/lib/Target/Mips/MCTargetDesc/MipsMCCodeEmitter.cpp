@@ -115,6 +115,10 @@ void MipsMCCodeEmitter::LowerCompactBranch(MCInst& Inst) const {
   Inst.getOperand(1).setReg(RegOp0);
 }
 
+bool MipsMCCodeEmitter::isMips16(const MCSubtargetInfo &STI) const {
+  return STI.getFeatureBits()[Mips::FeatureMips16];
+}
+
 bool MipsMCCodeEmitter::isMicroMips(const MCSubtargetInfo &STI) const {
   return STI.getFeatureBits()[Mips::FeatureMicroMips];
 }
@@ -760,6 +764,7 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
   if (Kind == MCExpr::Target) {
     const MipsMCExpr *MipsExpr = cast<MipsMCExpr>(Expr);
 
+#warning TODO: Need to add MIPS16 fixups to this switch/case.
     Mips::Fixups FixupKind = Mips::Fixups(0);
     switch (MipsExpr->getKind()) {
     case MipsMCExpr::MEK_None:
@@ -789,12 +794,22 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_GOTTPREL;
       break;
     case MipsMCExpr::MEK_GOT:
-      FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_GOT16
-                                   : Mips::fixup_Mips_GOT;
+      if (isMips16(STI)) {
+        FixupKind = Mips::fixup_MIPS16_GOT16;
+      } else if (isMicroMips(STI)) {
+        FixupKind = Mips::fixup_MICROMIPS_GOT16;
+      } else {
+        FixupKind = Mips::fixup_Mips_GOT;
+      }
       break;
     case MipsMCExpr::MEK_GOT_CALL:
-      FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_CALL16
-                                   : Mips::fixup_Mips_CALL16;
+      if (isMips16(STI)) {
+        FixupKind = Mips::fixup_MIPS16_CALL16;
+      } else if (isMicroMips(STI)) {
+        FixupKind = Mips::fixup_MICROMIPS_CALL16;
+      } else {
+        FixupKind = Mips::fixup_Mips_CALL16;
+      }
       break;
     case MipsMCExpr::MEK_GOT_DISP:
       FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_GOT_DISP
@@ -815,16 +830,24 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_GOT_OFST;
       break;
     case MipsMCExpr::MEK_GPREL:
+#warning TODO: This needs MIPS16 GPREL, but what about microMIPS GPREL16?
       FixupKind = Mips::fixup_Mips_GPREL16;
       break;
     case MipsMCExpr::MEK_LO:
       // Check for %lo(%neg(%gp_rel(X)))
-      if (MipsExpr->isGpOff())
+      if (MipsExpr->isGpOff()) {
+        // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+        if (isMips16(STI)) {
+          Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+          return 0;
+        }
+
         FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_GPOFF_LO
                                      : Mips::fixup_Mips_GPOFF_LO;
-      else
+      } else {
         FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_LO16
                                      : Mips::fixup_Mips_LO16;
+      }
       break;
     case MipsMCExpr::MEK_HIGHEST:
       FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_HIGHEST
@@ -836,12 +859,19 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
       break;
     case MipsMCExpr::MEK_HI:
       // Check for %hi(%neg(%gp_rel(X)))
-      if (MipsExpr->isGpOff())
+      if (MipsExpr->isGpOff()) {
+        // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+        if (isMips16(STI)) {
+          Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+          return 0;
+        }
+
         FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_GPOFF_HI
                                      : Mips::fixup_Mips_GPOFF_HI;
-      else
+      } else {
         FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_HI16
                                      : Mips::fixup_Mips_HI16;
+      }
       break;
     case MipsMCExpr::MEK_PCREL_HI16:
       FixupKind = Mips::fixup_MIPS_PCHI16;
@@ -866,6 +896,12 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_TPREL_LO;
       break;
     case MipsMCExpr::MEK_NEG:
+      // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+      if (isMips16(STI)) {
+        Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+        return 0;
+      }
+
       FixupKind =
           isMicroMips(STI) ? Mips::fixup_MICROMIPS_SUB : Mips::fixup_Mips_SUB;
       break;
@@ -917,20 +953,19 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
 
   Encoding.val = 0;
 
-  // The number of caller-saved regs for 'aregs' and 'xsregs' is determined by
-  // the largest register number in the list. That is [$4-7] for 'aregs' and
-  // [$18-23, $30] for 'xsregs'. All other regs below those are implicitly
-  // handled. For example, reg $6 would also handle regs $4 and $5 even if they
-  // were not called out in the assembly code.
-  // This is similar for the callee-saved registers for 'aregs', but the count
-  // is determined by the smallest register number. For example, if only reg $4
-  // were specified, then the other three argument regs would be handled. The
-  // MIPS16 documentation calls these "static" registers.
+  // The number of caller-saved regs for 'aregs' and saved 'xsregs' is 
+  // determined by the largest register number in the list. That is [$4-7] for
+  // 'aregs' and [$18-23, $30] for 'xsregs'. All other regs below those are
+  // implicitly handled. For example, reg $6 would also handle regs $4 and $5
+  // even if they were not called out in the assembly code.
+  // This is similar for the static registers in 'aregs', but the count is
+  // determined by the smallest register number. For example, if only reg $4
+  // were specified, then the other three argument regs would be handled.
   unsigned NumAregArgs = 0;
   unsigned NumAregStatics = 0;
   unsigned NumXsRegs = 0;
 
-  // Get caller-saved regs.
+  // Get saved "$s_" regs (xsregs) and caller-saved argument regs.
   while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
     switch(MI.getOperand(OpNo).getReg()) {
     default:
@@ -984,7 +1019,7 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
   Encoding.bits.framesize = MI.getOperand(OpNo).getImm() >> 3;
   ++OpNo;
 
-  // Get callee-saved regs.
+  // Get static argument regs (ones that are saved at the end of the callee stack).
   while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
       unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
       if(NumAregStatics < (8 - RegIdx))
@@ -1258,7 +1293,7 @@ MipsMCCodeEmitter::getSimm18Lsl3Encoding(const MCInst &MI, unsigned OpNo,
 }
 
 unsigned
-MipsMCCodeEmitter::getUImm3Mod8Encoding(const MCInst &MI, unsigned OpNo,
+MipsMCCodeEmitter::getUImm3ShiftEncoding(const MCInst &MI, unsigned OpNo,
                                         SmallVectorImpl<MCFixup> &Fixups,
                                         const MCSubtargetInfo &STI) const {
   assert(MI.getOperand(OpNo).isImm());

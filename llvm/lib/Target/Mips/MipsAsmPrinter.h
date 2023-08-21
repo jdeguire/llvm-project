@@ -156,6 +156,7 @@ public:
   void printRAPseudoReg(const MachineInstr *MI, int opNum, raw_ostream &O);
   void printFCCOperand(const MachineInstr *MI, int opNum, raw_ostream &O,
                        const char *Modifier = nullptr);
+  void printSaveRestore(const MachineInstr *MI, int opNum, raw_ostream &O);
   void printRegisterList(const MachineInstr *MI, int opNum, raw_ostream &O);
   void emitStartOfAsmFile(Module &M) override;
   void emitEndOfAsmFile(Module &M) override;
