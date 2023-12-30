@@ -2236,25 +2236,22 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
       if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
-#warning TODO: Should Bimm16 be here? It is the compressed version, so maybe not.
-#warning TODO: Really, do any of these need to be here?
-    case Mips::Bimm16:
+    case Mips::BimmX16:
+    case Mips::BteqzX16:
+    case Mips::BtnezX16:
       assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
       Offset = Inst.getOperand(0);
-      if (!Offset.isImm()) {
-        // This should already be handled by the 'isConstantImm()' predicate,
-        // but check here in case I'm wrong.
-        return Error(IDLoc,
-                     "compressed branch operand must be a constant immediate");
-      }
-      if (!isInt<12>(Offset.getImm()))
+      if (!Offset.isImm())
+        break; // We'll deal with this situation later on when applying fixups.
+      if (!isInt<17>(Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
       // For now, ignore the LSbit for compability with GNU AS, which expects
       // the offset to have the LSbit set.
       break;
-    case Mips::BimmX16:
-      assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
-      Offset = Inst.getOperand(0);
+    case Mips::BeqzRxImmX16:
+    case Mips::BnezRxImmX16:
+      assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
+      Offset = Inst.getOperand(1);
       if (!Offset.isImm())
         break; // We'll deal with this situation later on when applying fixups.
       if (!isInt<17>(Offset.getImm()))
@@ -2268,7 +2265,7 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
       Offset = Inst.getOperand(0);
       if (!Offset.isImm())
         break; // We'll deal with this situation later on when applying fixups.
-      if (!isInt<28>(Offset.getImm()))
+      if (!isUInt<28>(Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
       if (offsetToAlignment(Offset.getImm(), Align(4)))
         return Error(IDLoc, "branch to misaligned address");
@@ -2439,6 +2436,7 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
   }
 
 #warning TODO: Does this need modifying for MIPS16 memory instructions?
+  // Yes, yes it does. This turns instructions with too-big immediates into multiple instructions.
   if (MCID.mayLoad() || MCID.mayStore()) {
     // Check the offset of memory operand, if it is a symbol
     // reference or immediate we may have to expand instructions.
@@ -6346,6 +6344,9 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm16_AltRelaxed:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 16-bit unsigned immediate");
+  case Match_SImm15:
+    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
+                 "expected 15-bit signed immediate");
   case Match_SImm16:
   case Match_SImm16_Relaxed:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
@@ -6644,7 +6645,7 @@ bool MipsAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
   // Check if the current operand has a custom associated parser, if so, try to
   // custom parse the operand, or fallback to the general approach.
-  OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic);
+  OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic, true);
   if (ResTy == MatchOperand_Success)
     return false;
   // If there wasn't a custom match, try the generic matcher below. Otherwise,
@@ -7200,7 +7201,7 @@ MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
   const llvm::MCRegisterInfo *RegInfo = getContext().getRegisterInfo();
 
   // MIPS16 Save and Restore instructions are weird and the MIPS16 docs do
-  // not provide useful syntax info. This will a syntax similar to GNU AS:
+  // not provide useful syntax info. This will use a syntax similar to GNU AS:
   // 
   //   save/restore {saved aregs and sregs}, frame size, {static aregs}
   //

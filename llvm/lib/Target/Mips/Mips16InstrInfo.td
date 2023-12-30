@@ -533,25 +533,24 @@ class FCCRR16_ins<string asmstr> :
 // EXT-RI instruction format
 //
 
-class FEXT_RI16_ins_base<bits<5> _op, string asmstr, string asmstr2,
-                         InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins simm16:$imm16),
+class FEXT_RI16_ins_base<bits<5> _op, string asmstr, string asmstr2, 
+                         Operand ImmOpnd, InstrItinClass itin>:
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins ImmOpnd:$imm16),
                   !strconcat(asmstr, asmstr2), [], itin>;
 
-class FEXT_RI16_ins<bits<5> _op, string asmstr,
+class FEXT_RI16_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
                     InstrItinClass itin>:
-  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
+  FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm16", ImmOpnd, itin>;
 
 // TODO: Can this be combined with the one below it? This is the only place it is used.
-class FEXT_RI16R_ins_base<bits<5> _op, string asmstr, string asmstr2,
-                         InstrItinClass itin>:
-  FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, simm16:$imm16),
+class FEXT_RI16R_ins_base<bits<5> _op, string asmstr, string asmstr2, 
+                          Operand ImmOpnd, InstrItinClass itin>:
+  FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, ImmOpnd:$imm16),
                   !strconcat(asmstr, asmstr2), [], itin>;
 
-// TODO: This needs either an unsigned version or the operand type needs to be selectable.
-class FEXT_RI16R_ins<bits<5> _op, string asmstr,
+class FEXT_RI16R_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
                     InstrItinClass itin>:
-  FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", itin>;
+  FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", ImmOpnd, itin>;
 
 class FEXT_RI16_PC_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, simm16:$imm16),
@@ -907,7 +906,7 @@ def AddiuRxImm16:
   FRI16_ins<0b01001, "addiu", simm8, IIM16Alu>, ArithLogic16Defs<0>;
 
 def AddiuRxImmX16:
-  FEXT_RI16_ins<0b01001, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
+  FEXT_RI16_ins<0b01001, "addiu", simm16, IIM16Alu>, ArithLogic16Defs<0>;
 
 // TODO: Is this needed? It's used in a pattern.
 def AddiuRxRxImm16: F2RI16_ins<0b01001, "addiu", IIM16Alu>,
@@ -1139,7 +1138,7 @@ def CmpiRxImm16: FRI16R_ins<0b01110, "cmpi", IIM16Alu> {
 // Purpose: Compare Immediate (Extended)
 // To compare a constant with the contents of a GPR.
 //
-def CmpiRxImmX16: FEXT_RI16R_ins<0b01110, "cmpi", IIM16Alu> {
+def CmpiRxImmX16: FEXT_RI16R_ins<0b01110, "cmpi", uimm16, IIM16Alu> {
   let Defs = [T8];
 }
 
@@ -1364,9 +1363,9 @@ def LiRxImm16: FRI16_ins<0b01101, "li", uimm8, IIM16Alu>;
 // Purpose: Load Immediate (Extended)
 // To load a constant into a GPR.
 //
-def LiRxImmX16: FEXT_RI16_ins<0b01101, "li", IIM16Alu>;
+def LiRxImmX16: FEXT_RI16_ins<0b01101, "li", uimm16, IIM16Alu>;
 
-def LiRxImmAlignX16: FEXT_RI16_ins<0b01101, ".align 2\n\tli", IIM16Alu> {
+def LiRxImmAlignX16: FEXT_RI16_ins<0b01101, ".align 2\n\tli", uimm16, IIM16Alu> {
   let isCodeGenOnly = 1;
 }
 
@@ -1781,7 +1780,7 @@ def SltiRxImm16: FRI16R_ins<0b01010, "slti", IIM16Alu> {
 // To record the result of a less-than comparison with a constant.
 //
 //
-def SltiRxImmX16: FEXT_RI16R_ins<0b01010, "slti", IIM16Alu> {
+def SltiRxImmX16: FEXT_RI16R_ins<0b01010, "slti", simm16, IIM16Alu> {
   let Defs = [T8];
 }
 
@@ -1802,7 +1801,7 @@ def SltiuRxImm16: FRI16R_ins<0b01011, "sltiu", IIM16Alu> {
 // To record the result of a less-than comparison with a constant.
 //
 //
-def SltiuRxImmX16: FEXT_RI16R_ins<0b01011, "sltiu", IIM16Alu> {
+def SltiuRxImmX16: FEXT_RI16R_ins<0b01011, "sltiu", uimm16_relaxed, IIM16Alu> {
   let Defs = [T8];
 }
 //

@@ -1012,7 +1012,7 @@ def uimm6_lsl2 : Operand<OtherVT> {
 def uimm8_lsl2 : Operand<OtherVT> {
   let EncoderMethod = "getUImm8Lsl2Encoding";
   let DecoderMethod = "DecodeUImmWithOffsetAndScale<8, 0, 4>";
-  let ParserMatchClass = ConstantSImm7Lsl2AsmOperandClass;
+  let ParserMatchClass = ConstantUImm8Lsl2AsmOperandClass;
 }
 
 def uimm26_lsl2 : Operand<OtherVT> {
@@ -3014,7 +3014,8 @@ let AdditionalPredicates = [NotInMicroMips] in
 class LoadImmediate32<string instr_asm, Operand Od, RegisterOperand RO> :
   MipsAsmPseudoInst<(outs RO:$rt), (ins Od:$imm32),
                      !strconcat(instr_asm, "\t$rt, $imm32")> ;
-def LoadImm32 : LoadImmediate32<"li", uimm32_coerced, GPR32Opnd>;
+let AdditionalPredicates = [NotInMips16Mode] in
+  def LoadImm32 : LoadImmediate32<"li", uimm32_coerced, GPR32Opnd>;
 
 class LoadAddressFromReg32<string instr_asm, Operand MemOpnd,
                            RegisterOperand RO> :
