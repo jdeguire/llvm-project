@@ -46,6 +46,7 @@ public:
   bool enableCalleeSaveSkip(const MachineFunction &MF) const override;
 
   bool hasFP(const MachineFunction &MF) const override;
+  bool isFPReserved(const MachineFunction &MF) const;
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   bool canSimplifyCallFramePseudos(const MachineFunction &MF) const override;
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
@@ -57,6 +58,9 @@ public:
                       BitVector &SavedRegs) const override;
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS) const override;
+
+  void processFunctionBeforeFrameFinalized(
+      MachineFunction &MF, RegScavenger *RS = nullptr) const override;
 
   void adjustForSegmentedStacks(MachineFunction &MF,
                                 MachineBasicBlock &MBB) const override;

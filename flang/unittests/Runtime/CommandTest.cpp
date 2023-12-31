@@ -10,8 +10,14 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "flang/Runtime/descriptor.h"
+#include "flang/Runtime/extensions.h"
 #include "flang/Runtime/main.h"
+#include <cstddef>
 #include <cstdlib>
+
+#if _REENTRANT || _POSIX_C_SOURCE >= 199506L
+#include <limits.h> // LOGIN_NAME_MAX used in getlog test
+#endif
 
 using namespace Fortran::runtime;
 
@@ -49,7 +55,7 @@ static OwningPtr<Descriptor> EmptyIntDescriptor() {
 class CommandFixture : public ::testing::Test {
 protected:
   CommandFixture(int argc, const char *argv[]) {
-    RTNAME(ProgramStart)(argc, argv, {});
+    RTNAME(ProgramStart)(argc, argv, {}, {});
   }
 
   std::string GetPaddedStr(const char *text, std::size_t len) const {
@@ -57,6 +63,13 @@ protected:
     assert(res.length() <= len && "No room to pad");
     res.append(len - res.length(), ' ');
     return res;
+  }
+
+  void CheckCharEqStr(const char *value, const std::string &expected) const {
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(std::strncmp(value, expected.c_str(), expected.size()), 0)
+        << "expected: " << expected << "\n"
+        << "value: " << value;
   }
 
   void CheckDescriptorEqStr(
@@ -105,11 +118,11 @@ protected:
     SCOPED_TRACE(n);
     SCOPED_TRACE("Checking argument:");
     CheckValue(
-        [&](const Descriptor *value, const Descriptor *,
+        [&](const Descriptor *value, const Descriptor *length,
             const Descriptor *errmsg) {
-          return RTNAME(ArgumentValue)(n, value, errmsg);
+          return RTNAME(GetCommandArgument)(n, value, length, errmsg);
         },
-        expectedValue);
+        expectedValue, std::strlen(expectedValue));
   }
 
   void CheckCommandValue(const char *args[], int n) const {
@@ -132,12 +145,12 @@ protected:
     SCOPED_TRACE(name);
     SCOPED_TRACE("Checking environment variable");
     CheckValue(
-        [&](const Descriptor *value, const Descriptor *,
+        [&](const Descriptor *value, const Descriptor *length,
             const Descriptor *errmsg) {
-          return RTNAME(EnvVariableValue)(*CharDescriptor(name), value,
-              trimName, errmsg, /*sourceFile=*/nullptr, /*line=*/0);
+          return RTNAME(GetEnvVariable)(
+              *CharDescriptor(name), value, length, trimName, errmsg);
         },
-        expectedValue);
+        expectedValue, std::strlen(expectedValue));
   }
 
   void CheckMissingEnvVarValue(const char *name, bool trimName = true) const {
@@ -147,27 +160,31 @@ protected:
     ASSERT_EQ(nullptr, std::getenv(name))
         << "Environment variable " << name << " not expected to exist";
 
-    OwningPtr<Descriptor> nameDescriptor{CharDescriptor(name)};
-    EXPECT_EQ(0, RTNAME(EnvVariableLength)(*nameDescriptor, trimName));
     CheckValue(
-        [&](const Descriptor *value, const Descriptor *,
+        [&](const Descriptor *value, const Descriptor *length,
             const Descriptor *errmsg) {
-          return RTNAME(EnvVariableValue)(*nameDescriptor, value, trimName,
-              errmsg, /*sourceFile=*/nullptr, /*line=*/0);
+          return RTNAME(GetEnvVariable)(
+              *CharDescriptor(name), value, length, trimName, errmsg);
         },
-        "", -1, 1, "Missing environment variable");
+        "", 0, 1, "Missing environment variable");
   }
 
   void CheckMissingArgumentValue(int n, const char *errStr = nullptr) const {
     OwningPtr<Descriptor> value{CreateEmptyCharDescriptor()};
     ASSERT_NE(value, nullptr);
 
+    OwningPtr<Descriptor> length{EmptyIntDescriptor()};
+    ASSERT_NE(length, nullptr);
+
     OwningPtr<Descriptor> err{errStr ? CreateEmptyCharDescriptor() : nullptr};
 
-    EXPECT_GT(RTNAME(ArgumentValue)(n, value.get(), err.get()), 0);
+    EXPECT_GT(
+        RTNAME(GetCommandArgument)(n, value.get(), length.get(), err.get()), 0);
 
     std::string spaces(value->ElementBytes(), ' ');
     CheckDescriptorEqStr(value.get(), spaces);
+
+    CheckDescriptorEqInt<std::int64_t>(length.get(), 0);
 
     if (errStr) {
       std::string paddedErrStr(GetPaddedStr(errStr, err->ElementBytes()));
@@ -189,7 +206,7 @@ protected:
     std::string spaces(value->ElementBytes(), ' ');
     CheckDescriptorEqStr(value.get(), spaces);
 
-    CheckDescriptorEqInt(length.get(), 0);
+    CheckDescriptorEqInt<std::int64_t>(length.get(), 0);
 
     if (errStr) {
       std::string paddedErrStr(GetPaddedStr(errStr, err->ElementBytes()));
@@ -215,14 +232,10 @@ protected:
 
 TEST_F(ZeroArguments, ArgumentCount) { EXPECT_EQ(0, RTNAME(ArgumentCount)()); }
 
-TEST_F(ZeroArguments, ArgumentLength) {
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(-1));
-  EXPECT_EQ(8, RTNAME(ArgumentLength)(0));
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(1));
-}
-
-TEST_F(ZeroArguments, ArgumentValue) {
+TEST_F(ZeroArguments, GetCommandArgument) {
+  CheckMissingArgumentValue(-1);
   CheckArgumentValue(commandOnlyArgv[0], 0);
+  CheckMissingArgumentValue(1);
 }
 
 TEST_F(ZeroArguments, GetCommand) { CheckCommandValue(commandOnlyArgv, 1); }
@@ -235,16 +248,11 @@ protected:
 
 TEST_F(OneArgument, ArgumentCount) { EXPECT_EQ(1, RTNAME(ArgumentCount)()); }
 
-TEST_F(OneArgument, ArgumentLength) {
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(-1));
-  EXPECT_EQ(8, RTNAME(ArgumentLength)(0));
-  EXPECT_EQ(20, RTNAME(ArgumentLength)(1));
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(2));
-}
-
-TEST_F(OneArgument, ArgumentValue) {
+TEST_F(OneArgument, GetCommandArgument) {
+  CheckMissingArgumentValue(-1);
   CheckArgumentValue(oneArgArgv[0], 0);
   CheckArgumentValue(oneArgArgv[1], 1);
+  CheckMissingArgumentValue(2);
 }
 
 TEST_F(OneArgument, GetCommand) { CheckCommandValue(oneArgArgv, 2); }
@@ -262,17 +270,7 @@ TEST_F(SeveralArguments, ArgumentCount) {
   EXPECT_EQ(4, RTNAME(ArgumentCount)());
 }
 
-TEST_F(SeveralArguments, ArgumentLength) {
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(-1));
-  EXPECT_EQ(8, RTNAME(ArgumentLength)(0));
-  EXPECT_EQ(16, RTNAME(ArgumentLength)(1));
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(2));
-  EXPECT_EQ(22, RTNAME(ArgumentLength)(3));
-  EXPECT_EQ(1, RTNAME(ArgumentLength)(4));
-  EXPECT_EQ(0, RTNAME(ArgumentLength)(5));
-}
-
-TEST_F(SeveralArguments, ArgumentValue) {
+TEST_F(SeveralArguments, GetCommandArgument) {
   CheckArgumentValue(severalArgsArgv[0], 0);
   CheckArgumentValue(severalArgsArgv[1], 1);
   CheckArgumentValue(severalArgsArgv[3], 3);
@@ -280,10 +278,11 @@ TEST_F(SeveralArguments, ArgumentValue) {
 }
 
 TEST_F(SeveralArguments, NoArgumentValue) {
-  // Make sure we don't crash if the 'value' and 'error' parameters aren't
-  // passed.
-  EXPECT_EQ(RTNAME(ArgumentValue)(2, nullptr, nullptr), 0);
-  EXPECT_GT(RTNAME(ArgumentValue)(-1, nullptr, nullptr), 0);
+  // Make sure we don't crash if the 'value', 'length' and 'error' parameters
+  // aren't passed.
+  EXPECT_GT(RTNAME(GetCommandArgument)(2), 0);
+  EXPECT_EQ(RTNAME(GetCommandArgument)(1), 0);
+  EXPECT_GT(RTNAME(GetCommandArgument)(-1), 0);
 }
 
 TEST_F(SeveralArguments, MissingArguments) {
@@ -296,14 +295,19 @@ TEST_F(SeveralArguments, MissingArguments) {
 TEST_F(SeveralArguments, ArgValueTooShort) {
   OwningPtr<Descriptor> tooShort{CreateEmptyCharDescriptor<15>()};
   ASSERT_NE(tooShort, nullptr);
-  EXPECT_EQ(RTNAME(ArgumentValue)(1, tooShort.get(), nullptr), -1);
+  EXPECT_EQ(RTNAME(GetCommandArgument)(1, tooShort.get()), -1);
   CheckDescriptorEqStr(tooShort.get(), severalArgsArgv[1]);
 
+  OwningPtr<Descriptor> length{EmptyIntDescriptor()};
+  ASSERT_NE(length, nullptr);
   OwningPtr<Descriptor> errMsg{CreateEmptyCharDescriptor()};
   ASSERT_NE(errMsg, nullptr);
 
-  EXPECT_EQ(RTNAME(ArgumentValue)(1, tooShort.get(), errMsg.get()), -1);
+  EXPECT_EQ(
+      RTNAME(GetCommandArgument)(1, tooShort.get(), length.get(), errMsg.get()),
+      -1);
 
+  CheckDescriptorEqInt<std::int64_t>(length.get(), 16);
   std::string expectedErrMsg{
       GetPaddedStr("Value too short", errMsg->ElementBytes())};
   CheckDescriptorEqStr(errMsg.get(), expectedErrMsg);
@@ -311,7 +315,7 @@ TEST_F(SeveralArguments, ArgValueTooShort) {
 
 TEST_F(SeveralArguments, ArgErrMsgTooShort) {
   OwningPtr<Descriptor> errMsg{CreateEmptyCharDescriptor<3>()};
-  EXPECT_GT(RTNAME(ArgumentValue)(-1, nullptr, errMsg.get()), 0);
+  EXPECT_GT(RTNAME(GetCommandArgument)(-1, nullptr, nullptr, errMsg.get()), 0);
   CheckDescriptorEqStr(errMsg.get(), "Inv");
 }
 
@@ -329,7 +333,7 @@ TEST_F(SeveralArguments, CommandErrMsgTooShort) {
 
   std::string spaces(value->ElementBytes(), ' ');
   CheckDescriptorEqStr(value.get(), spaces);
-  CheckDescriptorEqInt(length.get(), 0);
+  CheckDescriptorEqInt<std::int64_t>(length.get(), 0);
   CheckDescriptorEqStr(errMsg.get(), "Mis");
 }
 
@@ -360,7 +364,7 @@ TEST_F(OnlyValidArguments, CommandValueTooShort) {
 
   CheckDescriptorEqStr(
       tooShort.get(), "aProgram -f has/a/few/slashes has\\a\\few\\backslashe");
-  CheckDescriptorEqInt(length.get(), 51);
+  CheckDescriptorEqInt<std::int64_t>(length.get(), 51);
 
   OwningPtr<Descriptor> errMsg{CreateEmptyCharDescriptor()};
   ASSERT_NE(errMsg, nullptr);
@@ -386,7 +390,7 @@ TEST_F(OnlyValidArguments, GetCommandCanTakeNull) {
           value->ElementBytes()));
 
   EXPECT_EQ(0, RTNAME(GetCommand)(nullptr, length.get(), nullptr));
-  CheckDescriptorEqInt(length.get(), 51);
+  CheckDescriptorEqInt<std::int64_t>(length.get(), 51);
 }
 
 TEST_F(OnlyValidArguments, GetCommandShortLength) {
@@ -397,10 +401,20 @@ TEST_F(OnlyValidArguments, GetCommandShortLength) {
   CheckDescriptorEqInt<short>(length.get(), 51);
 }
 
+TEST_F(ZeroArguments, GetPID) {
+  // pid should always greater than 0, in both linux and windows
+  EXPECT_GT(RTNAME(GetPID)(), 0);
+}
+
 class EnvironmentVariables : public CommandFixture {
 protected:
   EnvironmentVariables() : CommandFixture(0, nullptr) {
     SetEnv("NAME", "VALUE");
+#ifdef _WIN32
+    SetEnv("USERNAME", "loginName");
+#else
+    SetEnv("LOGNAME", "loginName");
+#endif
     SetEnv("EMPTY", "");
   }
 
@@ -423,7 +437,6 @@ private:
 
 TEST_F(EnvironmentVariables, Nonexistent) {
   CheckMissingEnvVarValue("DOESNT_EXIST");
-
   CheckMissingEnvVarValue("      ");
   CheckMissingEnvVarValue("");
 }
@@ -432,12 +445,15 @@ TEST_F(EnvironmentVariables, Basic) {
   // Test a variable that's expected to exist in the environment.
   char *path{std::getenv("PATH")};
   auto expectedLen{static_cast<int64_t>(std::strlen(path))};
-  EXPECT_EQ(expectedLen, RTNAME(EnvVariableLength)(*CharDescriptor("PATH")));
+  OwningPtr<Descriptor> length{EmptyIntDescriptor()};
+  EXPECT_EQ(0,
+      RTNAME(GetEnvVariable)(*CharDescriptor("PATH"),
+          /*value=*/nullptr, length.get()));
+  CheckDescriptorEqInt(length.get(), expectedLen);
 }
 
 TEST_F(EnvironmentVariables, Trim) {
   if (EnableFineGrainedTests()) {
-    EXPECT_EQ(5, RTNAME(EnvVariableLength)(*CharDescriptor("NAME   ")));
     CheckEnvVarValue("VALUE", "NAME   ");
   }
 }
@@ -450,7 +466,6 @@ TEST_F(EnvironmentVariables, NoTrim) {
 
 TEST_F(EnvironmentVariables, Empty) {
   if (EnableFineGrainedTests()) {
-    EXPECT_EQ(0, RTNAME(EnvVariableLength)(*CharDescriptor("EMPTY")));
     CheckEnvVarValue("", "EMPTY");
   }
 }
@@ -458,10 +473,10 @@ TEST_F(EnvironmentVariables, Empty) {
 TEST_F(EnvironmentVariables, NoValueOrErrmsg) {
   ASSERT_EQ(std::getenv("DOESNT_EXIST"), nullptr)
       << "Environment variable DOESNT_EXIST actually exists";
-  EXPECT_EQ(RTNAME(EnvVariableValue)(*CharDescriptor("DOESNT_EXIST")), 1);
+  EXPECT_EQ(RTNAME(GetEnvVariable)(*CharDescriptor("DOESNT_EXIST")), 1);
 
   if (EnableFineGrainedTests()) {
-    EXPECT_EQ(RTNAME(EnvVariableValue)(*CharDescriptor("NAME")), 0);
+    EXPECT_EQ(RTNAME(GetEnvVariable)(*CharDescriptor("NAME")), 0);
   }
 }
 
@@ -469,16 +484,16 @@ TEST_F(EnvironmentVariables, ValueTooShort) {
   if (EnableFineGrainedTests()) {
     OwningPtr<Descriptor> tooShort{CreateEmptyCharDescriptor<2>()};
     ASSERT_NE(tooShort, nullptr);
-    EXPECT_EQ(RTNAME(EnvVariableValue)(*CharDescriptor("NAME"), tooShort.get(),
-                  /*trim_name=*/true, nullptr),
+    EXPECT_EQ(RTNAME(GetEnvVariable)(*CharDescriptor("NAME"), tooShort.get(),
+                  /*length=*/nullptr, /*trim_name=*/true, nullptr),
         -1);
     CheckDescriptorEqStr(tooShort.get(), "VALUE");
 
     OwningPtr<Descriptor> errMsg{CreateEmptyCharDescriptor()};
     ASSERT_NE(errMsg, nullptr);
 
-    EXPECT_EQ(RTNAME(EnvVariableValue)(*CharDescriptor("NAME"), tooShort.get(),
-                  /*trim_name=*/true, errMsg.get()),
+    EXPECT_EQ(RTNAME(GetEnvVariable)(*CharDescriptor("NAME"), tooShort.get(),
+                  /*length=*/nullptr, /*trim_name=*/true, errMsg.get()),
         -1);
 
     std::string expectedErrMsg{
@@ -492,8 +507,73 @@ TEST_F(EnvironmentVariables, ErrMsgTooShort) {
       << "Environment variable DOESNT_EXIST actually exists";
 
   OwningPtr<Descriptor> errMsg{CreateEmptyCharDescriptor<3>()};
-  EXPECT_EQ(RTNAME(EnvVariableValue)(*CharDescriptor("DOESNT_EXIST"), nullptr,
-                /*trim_name=*/true, errMsg.get()),
+  EXPECT_EQ(RTNAME(GetEnvVariable)(*CharDescriptor("DOESNT_EXIST"), nullptr,
+                /*length=*/nullptr, /*trim_name=*/true, errMsg.get()),
       1);
   CheckDescriptorEqStr(errMsg.get(), "Mis");
 }
+
+// username first char must not be null
+TEST_F(EnvironmentVariables, GetlogGetName) {
+  const int charLen{3};
+  char input[charLen]{"\0\0"};
+
+  FORTRAN_PROCEDURE_NAME(getlog)
+  (reinterpret_cast<std::byte *>(input), charLen);
+
+  EXPECT_NE(input[0], '\0');
+}
+
+#if _REENTRANT || _POSIX_C_SOURCE >= 199506L
+TEST_F(EnvironmentVariables, GetlogPadSpace) {
+  // guarantee 1 char longer than max, last char should be pad space
+  const int charLen{LOGIN_NAME_MAX + 2};
+  char input[charLen];
+
+  FORTRAN_PROCEDURE_NAME(getlog)
+  (reinterpret_cast<std::byte *>(input), charLen);
+
+  EXPECT_EQ(input[charLen - 1], ' ');
+}
+#endif
+
+#ifdef _WIN32 // Test ability to get name from environment variable
+TEST_F(EnvironmentVariables, GetlogEnvGetName) {
+  if (EnableFineGrainedTests()) {
+    ASSERT_NE(std::getenv("USERNAME"), nullptr)
+        << "Environment variable USERNAME does not exist";
+
+    char input[]{"XXXXXXXXX"};
+    FORTRAN_PROCEDURE_NAME(getlog)
+    (reinterpret_cast<std::byte *>(input), sizeof(input));
+
+    CheckCharEqStr(input, "loginName");
+  }
+}
+
+TEST_F(EnvironmentVariables, GetlogEnvBufferShort) {
+  if (EnableFineGrainedTests()) {
+    ASSERT_NE(std::getenv("USERNAME"), nullptr)
+        << "Environment variable USERNAME does not exist";
+
+    char input[]{"XXXXXX"};
+    FORTRAN_PROCEDURE_NAME(getlog)
+    (reinterpret_cast<std::byte *>(input), sizeof(input));
+
+    CheckCharEqStr(input, "loginN");
+  }
+}
+
+TEST_F(EnvironmentVariables, GetlogEnvPadSpace) {
+  if (EnableFineGrainedTests()) {
+    ASSERT_NE(std::getenv("USERNAME"), nullptr)
+        << "Environment variable USERNAME does not exist";
+
+    char input[]{"XXXXXXXXXX"};
+    FORTRAN_PROCEDURE_NAME(getlog)
+    (reinterpret_cast<std::byte *>(input), sizeof(input));
+
+    CheckCharEqStr(input, "loginName ");
+  }
+}
+#endif

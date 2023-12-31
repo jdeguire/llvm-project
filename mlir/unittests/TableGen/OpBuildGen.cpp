@@ -77,8 +77,8 @@ protected:
     verifyOp(std::move(op), {i32Ty}, {*cstI32, *cstI32}, noAttrs);
 
     // Test collective params build method.
-    op =
-        builder.create<OpTy>(loc, TypeRange{i32Ty}, ValueRange{*cstI32, *cstI32});
+    op = builder.create<OpTy>(loc, TypeRange{i32Ty},
+                              ValueRange{*cstI32, *cstI32});
     verifyOp(std::move(op), {i32Ty}, {*cstI32, *cstI32}, noAttrs);
 
     // Test build method with no result types, default value of attributes.
@@ -131,7 +131,7 @@ TEST_F(OpBuildGenTest, BasicBuildMethods) {
 /// single variadic arg x
 /// {single variadic result, non-variadic result, multiple variadic results}
 ///
-/// Specifically to test that that ODS framework does not generate ambiguous
+/// Specifically to test that ODS framework does not generate ambiguous
 /// build() methods that fail to compile.
 
 /// Test build methods for an Op with a single varadic arg and a single

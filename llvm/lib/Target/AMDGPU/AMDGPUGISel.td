@@ -31,13 +31,13 @@ def gi_vop3mods :
     GIComplexOperandMatcher<s32, "selectVOP3Mods">,
     GIComplexPatternEquiv<VOP3Mods>;
 
+def gi_vop3modsnoncanonicalizing :
+    GIComplexOperandMatcher<s32, "selectVOP3ModsNonCanonicalizing">,
+    GIComplexPatternEquiv<VOP3ModsNonCanonicalizing>;
+
 def gi_vop3_no_mods :
     GIComplexOperandMatcher<s32, "selectVOP3NoMods">,
     GIComplexPatternEquiv<VOP3NoMods>;
-
-def gi_vop3mods_nnan :
-    GIComplexOperandMatcher<s32, "selectVOP3Mods_nnan">,
-    GIComplexPatternEquiv<VOP3Mods_nnan>;
 
 def gi_vop3omods :
     GIComplexOperandMatcher<s32, "selectVOP3OMods">,
@@ -54,6 +54,10 @@ def gi_vop3pmodsdot :
 def gi_dotiuvop3pmods :
     GIComplexOperandMatcher<s32, "selectDotIUVOP3PMods">,
     GIComplexPatternEquiv<DotIUVOP3PMods>;
+
+def gi_wmmaopselvop3pmods :
+    GIComplexOperandMatcher<s32, "selectWMMAOpSelVOP3PMods">,
+    GIComplexPatternEquiv<WMMAOpSelVOP3PMods>;
 
 def gi_vop3opselmods :
     GIComplexOperandMatcher<s32, "selectVOP3OpSelMods">,
@@ -84,6 +88,10 @@ def gi_smrd_sgpr :
     GIComplexOperandMatcher<s64, "selectSmrdSgpr">,
     GIComplexPatternEquiv<SMRDSgpr>;
 
+def gi_smrd_sgpr_imm :
+    GIComplexOperandMatcher<s64, "selectSmrdSgprImm">,
+    GIComplexPatternEquiv<SMRDSgprImm>;
+
 def gi_flat_offset :
     GIComplexOperandMatcher<s64, "selectFlatOffset">,
     GIComplexPatternEquiv<FlatOffset>;
@@ -97,6 +105,11 @@ def gi_global_saddr :
 def gi_mubuf_scratch_offset :
     GIComplexOperandMatcher<s32, "selectMUBUFScratchOffset">,
     GIComplexPatternEquiv<MUBUFScratchOffset>;
+
+def gi_buf_soffset :
+    GIComplexOperandMatcher<s32, "selectBUFSOffset">,
+    GIComplexPatternEquiv<BUFSOffset>;
+
 def gi_mubuf_scratch_offen :
     GIComplexOperandMatcher<s32, "selectMUBUFScratchOffen">,
     GIComplexPatternEquiv<MUBUFScratchOffen>;
@@ -140,6 +153,18 @@ def gi_smrd_buffer_imm :
 def gi_smrd_buffer_imm32 :
     GIComplexOperandMatcher<s64, "selectSMRDBufferImm32">,
     GIComplexPatternEquiv<SMRDBufferImm32>;
+
+def gi_smrd_buffer_sgpr_imm :
+    GIComplexOperandMatcher<s64, "selectSMRDBufferSgprImm">,
+    GIComplexPatternEquiv<SMRDBufferSgprImm>;
+
+def gi_vop3_mad_mix_mods :
+    GIComplexOperandMatcher<s64, "selectVOP3PMadMixMods">,
+    GIComplexPatternEquiv<VOP3PMadMixMods>;
+
+def gi_vop3_mad_mix_mods_ext :
+    GIComplexOperandMatcher<s64, "selectVOP3PMadMixModsExt">,
+    GIComplexPatternEquiv<VOP3PMadMixModsExt>;
 
 // Separate load nodes are defined to glue m0 initialization in
 // SelectionDAG. The GISel selector can just insert m0 initialization
@@ -202,6 +227,7 @@ def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_UBYTE, SIbuffer_load_ubyte>;
 def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_SSHORT, SIbuffer_load_short>;
 def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_SBYTE, SIbuffer_load_byte>;
 def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_FORMAT, SIbuffer_load_format>;
+def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_FORMAT_TFE, SIbuffer_load_format_tfe>;
 def : GINodeEquiv<G_AMDGPU_BUFFER_LOAD_FORMAT_D16, SIbuffer_load_format_d16>;
 def : GINodeEquiv<G_AMDGPU_TBUFFER_LOAD_FORMAT, SItbuffer_load>;
 def : GINodeEquiv<G_AMDGPU_TBUFFER_LOAD_FORMAT_D16, SItbuffer_load_d16>;
@@ -214,10 +240,8 @@ def : GINodeEquiv<G_AMDGPU_TBUFFER_STORE_FORMAT, SItbuffer_store>;
 def : GINodeEquiv<G_AMDGPU_TBUFFER_STORE_FORMAT_D16, SItbuffer_store_d16>;
 
 // FIXME: Check MMO is atomic
-def : GINodeEquiv<G_AMDGPU_ATOMIC_INC, SIatomic_inc>;
-def : GINodeEquiv<G_AMDGPU_ATOMIC_DEC, SIatomic_dec>;
-def : GINodeEquiv<G_AMDGPU_ATOMIC_INC, atomic_inc_glue>;
-def : GINodeEquiv<G_AMDGPU_ATOMIC_DEC, atomic_dec_glue>;
+def : GINodeEquiv<G_ATOMICRMW_UINC_WRAP, atomic_load_uinc_wrap_glue>;
+def : GINodeEquiv<G_ATOMICRMW_UDEC_WRAP, atomic_load_udec_wrap_glue>;
 def : GINodeEquiv<G_AMDGPU_ATOMIC_FMIN, SIatomic_fmin>;
 def : GINodeEquiv<G_AMDGPU_ATOMIC_FMAX, SIatomic_fmax>;
 def : GINodeEquiv<G_AMDGPU_ATOMIC_FMIN, atomic_load_fmin_glue>;
@@ -360,3 +384,6 @@ def gi_set_glc : GICustomOperandRenderer<"renderSetGLC">,
 
 def gi_frameindex_to_targetframeindex : GICustomOperandRenderer<"renderFrameIndex">,
   GISDNodeXFormEquiv<frameindex_to_targetframeindex>;
+
+def gi_fp_pow2_to_exponent : GICustomOperandRenderer<"renderFPPow2ToExponent">,
+  GISDNodeXFormEquiv<FPPow2ToExponentXForm>;

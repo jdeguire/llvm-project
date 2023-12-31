@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_LOONGARCH_MCTARGETDESC_LOONGARCHASMBACKEND_H
 
 #include "MCTargetDesc/LoongArchBaseInfo.h"
+#include "MCTargetDesc/LoongArchFixupKinds.h"
 #include "MCTargetDesc/LoongArchMCTargetDesc.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCFixupKindInfo.h"
@@ -22,13 +23,22 @@
 namespace llvm {
 
 class LoongArchAsmBackend : public MCAsmBackend {
+  const MCSubtargetInfo &STI;
   uint8_t OSABI;
   bool Is64Bit;
+  const MCTargetOptions &TargetOptions;
 
 public:
-  LoongArchAsmBackend(const MCSubtargetInfo &STI, uint8_t OSABI, bool Is64Bit)
-      : MCAsmBackend(support::little), OSABI(OSABI), Is64Bit(Is64Bit) {}
+  LoongArchAsmBackend(const MCSubtargetInfo &STI, uint8_t OSABI, bool Is64Bit,
+                      const MCTargetOptions &Options)
+      : MCAsmBackend(llvm::endianness::little,
+                     LoongArch::fixup_loongarch_relax),
+        STI(STI), OSABI(OSABI), Is64Bit(Is64Bit), TargetOptions(Options) {}
   ~LoongArchAsmBackend() override {}
+
+  bool handleAddSubRelocations(const MCAsmLayout &Layout, const MCFragment &F,
+                               const MCFixup &Fixup, const MCValue &Target,
+                               uint64_t &FixedValue) const override;
 
   void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                   const MCValue &Target, MutableArrayRef<char> Data,
@@ -36,7 +46,8 @@ public:
                   const MCSubtargetInfo *STI) const override;
 
   bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override;
+                             const MCValue &Target,
+                             const MCSubtargetInfo *STI) override;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
@@ -45,9 +56,12 @@ public:
   }
 
   unsigned getNumFixupKinds() const override {
-    // FIXME: Implement this when we define fixup kind
-    return 0;
+    return LoongArch::NumTargetFixupKinds;
   }
+
+  std::optional<MCFixupKind> getFixupKind(StringRef Name) const override;
+
+  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override {}
@@ -57,7 +71,8 @@ public:
 
   std::unique_ptr<MCObjectTargetWriter>
   createObjectTargetWriter() const override;
+  const MCTargetOptions &getTargetOptions() const { return TargetOptions; }
 };
-} // namespace llvm
+} // end namespace llvm
 
 #endif // LLVM_LIB_TARGET_LOONGARCH_MCTARGETDESC_LOONGARCHASMBACKEND_H

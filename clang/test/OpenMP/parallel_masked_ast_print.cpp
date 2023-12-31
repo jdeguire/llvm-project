@@ -1,10 +1,10 @@
-// RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -verify -Wno-vla -fopenmp -ast-print %s | FileCheck %s
 // RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify -Wno-vla %s -ast-print | FileCheck %s
 
-// RUN: %clang_cc1 -verify -fopenmp-simd -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -verify -Wno-vla -fopenmp-simd -ast-print %s | FileCheck %s
 // RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify -Wno-vla %s -ast-print | FileCheck %s
 // expected-no-diagnostics
 
 #ifndef HEADER
@@ -198,6 +198,7 @@ enum Enum { };
 int main (int argc, char **argv) {
   long x;
   int b = argc, c, d, e, f, g;
+  int tid = 0;
   static int a;
   #pragma omp threadprivate(a)
   int arr[10][argc], arr1[2];
@@ -207,8 +208,8 @@ int main (int argc, char **argv) {
 // CHECK-NEXT: #pragma omp parallel masked
   a=2;
 // CHECK-NEXT: a = 2;
-#pragma omp parallel masked default(none), private(argc,b) firstprivate(argv) if (parallel: argc > 0) num_threads(ee) copyin(a) proc_bind(spread) reduction(| : c, d, arr1[argc]) reduction(* : e, arr[:10][0:argc]) allocate(e)
-// CHECK-NEXT: #pragma omp parallel masked default(none) private(argc,b) firstprivate(argv) if(parallel: argc > 0) num_threads(ee) copyin(a) proc_bind(spread) reduction(|: c,d,arr1[argc]) reduction(*: e,arr[:10][0:argc]) allocate(e)
+#pragma omp parallel masked default(none), private(argc,b) firstprivate(argv) if (parallel: argc > 0) num_threads(ee) copyin(a) proc_bind(spread) reduction(| : c, d, arr1[argc]) reduction(* : e, arr[:10][0:argc]) allocate(e) filter(tid)
+// CHECK-NEXT: #pragma omp parallel masked default(none) private(argc,b) firstprivate(argv) if(parallel: argc > 0) num_threads(ee) copyin(a) proc_bind(spread) reduction(|: c,d,arr1[argc]) reduction(*: e,arr[:10][0:argc]) allocate(e) filter(tid)
   foo();
 // CHECK-NEXT: foo();
 // CHECK-NEXT: #pragma omp parallel masked allocate(e) if(b) num_threads(c) proc_bind(close) reduction(^: e,f) reduction(&&: g,arr[0:argc][:10])

@@ -59,13 +59,14 @@ CHECK_CXX_SOURCE_COMPILES("
 
 set(LIBFUZZER_CFLAGS ${COMPILER_RT_COMMON_CFLAGS})
 
-if(OS_NAME MATCHES "Linux|Fuchsia" AND
+if(OS_NAME MATCHES "Android|Linux|Fuchsia" AND
    COMPILER_RT_LIBCXX_PATH AND
    COMPILER_RT_LIBCXXABI_PATH)
   list(APPEND LIBFUZZER_CFLAGS -D_LIBCPP_ABI_VERSION=Fuzzer)
   append_list_if(COMPILER_RT_HAS_NOSTDINCXX_FLAG -nostdinc++ LIBFUZZER_CFLAGS)
 elseif(TARGET cxx-headers OR HAVE_LIBCXX)
   # libFuzzer uses C++ standard library headers.
+  list(APPEND LIBFUZZER_CFLAGS ${COMPILER_RT_CXX_CFLAGS})
   set(LIBFUZZER_DEPS cxx-headers)
 endif()
 
@@ -134,14 +135,14 @@ add_compiler_rt_runtime(clang_rt.fuzzer_interceptors
   CFLAGS ${LIBFUZZER_CFLAGS}
   PARENT_TARGET fuzzer)
 
-if(OS_NAME MATCHES "Linux|Fuchsia" AND
+if(OS_NAME MATCHES "Android|Linux|Fuchsia" AND
    COMPILER_RT_LIBCXX_PATH AND
    COMPILER_RT_LIBCXXABI_PATH)
   macro(partially_link_libcxx name dir arch)
     get_target_flags_for_arch(${arch} target_cflags)
     if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
       get_compiler_rt_target(${arch} target)
-      set(target_cflags "--target=${target} ${target_cflags}")
+      set(target_cflags --target=${target} ${target_cflags})
     endif()
     set(cxx_${arch}_merge_dir "${CMAKE_CURRENT_BINARY_DIR}/cxx_${arch}_merge.dir")
     file(MAKE_DIRECTORY ${cxx_${arch}_merge_dir})

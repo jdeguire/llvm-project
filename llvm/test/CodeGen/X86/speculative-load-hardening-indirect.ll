@@ -11,16 +11,16 @@
 ;
 ; FIXME: Add support for 32-bit.
 
-@global_fnptr = external global i32 ()*
+@global_fnptr = external global ptr
 
-@global_blockaddrs = dso_local constant [4 x i8*] [
-  i8* blockaddress(@test_indirectbr_global, %bb0),
-  i8* blockaddress(@test_indirectbr_global, %bb1),
-  i8* blockaddress(@test_indirectbr_global, %bb2),
-  i8* blockaddress(@test_indirectbr_global, %bb3)
+@global_blockaddrs = dso_local constant [4 x ptr] [
+  ptr blockaddress(@test_indirectbr_global, %bb0),
+  ptr blockaddress(@test_indirectbr_global, %bb1),
+  ptr blockaddress(@test_indirectbr_global, %bb2),
+  ptr blockaddress(@test_indirectbr_global, %bb3)
 ]
 
-define dso_local i32 @test_indirect_call(i32 ()** %ptr) nounwind {
+define dso_local i32 @test_indirect_call(ptr %ptr) nounwind {
 ; X64-LABEL: test_indirect_call:
 ; X64:       # %bb.0: # %entry
 ; X64-NEXT:    pushq %rbx
@@ -88,12 +88,12 @@ define dso_local i32 @test_indirect_call(i32 ()** %ptr) nounwind {
 ; X64-RETPOLINE-NEXT:    popq %rbx
 ; X64-RETPOLINE-NEXT:    retq
 entry:
-  %fp = load i32 ()*, i32 ()** %ptr
+  %fp = load ptr, ptr %ptr
   %v = call i32 %fp()
   ret i32 %v
 }
 
-define dso_local i32 @test_indirect_tail_call(i32 ()** %ptr) nounwind {
+define dso_local i32 @test_indirect_tail_call(ptr %ptr) nounwind {
 ; X64-LABEL: test_indirect_tail_call:
 ; X64:       # %bb.0: # %entry
 ; X64-NEXT:    movq %rsp, %rax
@@ -127,7 +127,7 @@ define dso_local i32 @test_indirect_tail_call(i32 ()** %ptr) nounwind {
 ; X64-RETPOLINE-NEXT:    orq %rax, %rsp
 ; X64-RETPOLINE-NEXT:    jmp __llvm_retpoline_r11 # TAILCALL
 entry:
-  %fp = load i32 ()*, i32 ()** %ptr
+  %fp = load ptr, ptr %ptr
   %v = tail call i32 %fp()
   ret i32 %v
 }
@@ -203,7 +203,7 @@ define dso_local i32 @test_indirect_call_global() nounwind {
 ; X64-RETPOLINE-NEXT:    popq %rbx
 ; X64-RETPOLINE-NEXT:    retq
 entry:
-  %fp = load i32 ()*, i32 ()** @global_fnptr
+  %fp = load ptr, ptr @global_fnptr
   %v = call i32 %fp()
   ret i32 %v
 }
@@ -245,12 +245,12 @@ define dso_local i32 @test_indirect_tail_call_global() nounwind {
 ; X64-RETPOLINE-NEXT:    orq %rax, %rsp
 ; X64-RETPOLINE-NEXT:    jmp __llvm_retpoline_r11 # TAILCALL
 entry:
-  %fp = load i32 ()*, i32 ()** @global_fnptr
+  %fp = load ptr, ptr @global_fnptr
   %v = tail call i32 %fp()
   ret i32 %v
 }
 
-define dso_local i32 @test_indirectbr(i8** %ptr) nounwind {
+define dso_local i32 @test_indirectbr(ptr %ptr) nounwind {
 ; X64-LABEL: test_indirectbr:
 ; X64:       # %bb.0: # %entry
 ; X64-NEXT:    movq %rsp, %rcx
@@ -340,8 +340,8 @@ define dso_local i32 @test_indirectbr(i8** %ptr) nounwind {
 ; X64-RETPOLINE-LABEL: test_indirectbr:
 ; X64-RETPOLINE:       # %bb.0: # %entry
 entry:
-  %a = load i8*, i8** %ptr
-  indirectbr i8* %a, [ label %bb0, label %bb1, label %bb2, label %bb3 ]
+  %a = load ptr, ptr %ptr
+  indirectbr ptr %a, [ label %bb0, label %bb1, label %bb2, label %bb3 ]
 
 bb0:
   ret i32 2
@@ -472,17 +472,17 @@ define dso_local i32 @test_indirectbr_global(i32 %idx) nounwind {
 ; X64-RETPOLINE-NEXT:    orq %rcx, %rsp
 ; X64-RETPOLINE-NEXT:    retq
 ; X64-RETPOLINE-NEXT:  .Ltmp1: # Block address taken
-; X64-RETPOLINE-NEXT:  .LBB6_4: # %bb1
-; X64-RETPOLINE-NEXT:    cmovneq %rax, %rcx
-; X64-RETPOLINE-NEXT:    shlq $47, %rcx
-; X64-RETPOLINE-NEXT:    movl $7, %eax
-; X64-RETPOLINE-NEXT:    orq %rcx, %rsp
-; X64-RETPOLINE-NEXT:    retq
-; X64-RETPOLINE-NEXT:  .Ltmp2: # Block address taken
 ; X64-RETPOLINE-NEXT:  .LBB6_5: # %bb2
 ; X64-RETPOLINE-NEXT:    cmovneq %rax, %rcx
 ; X64-RETPOLINE-NEXT:    shlq $47, %rcx
 ; X64-RETPOLINE-NEXT:    movl $13, %eax
+; X64-RETPOLINE-NEXT:    orq %rcx, %rsp
+; X64-RETPOLINE-NEXT:    retq
+; X64-RETPOLINE-NEXT:  .Ltmp2: # Block address taken
+; X64-RETPOLINE-NEXT:  .LBB6_4: # %bb1
+; X64-RETPOLINE-NEXT:    cmovneq %rax, %rcx
+; X64-RETPOLINE-NEXT:    shlq $47, %rcx
+; X64-RETPOLINE-NEXT:    movl $7, %eax
 ; X64-RETPOLINE-NEXT:    orq %rcx, %rsp
 ; X64-RETPOLINE-NEXT:    retq
 ; X64-RETPOLINE-NEXT:  .Ltmp3: # Block address taken
@@ -493,9 +493,9 @@ define dso_local i32 @test_indirectbr_global(i32 %idx) nounwind {
 ; X64-RETPOLINE-NEXT:    orq %rcx, %rsp
 ; X64-RETPOLINE-NEXT:    retq
 entry:
-  %ptr = getelementptr [4 x i8*], [4 x i8*]* @global_blockaddrs, i32 0, i32 %idx
-  %a = load i8*, i8** %ptr
-  indirectbr i8* %a, [ label %bb0, label %bb1, label %bb2, label %bb3 ]
+  %ptr = getelementptr [4 x ptr], ptr @global_blockaddrs, i32 0, i32 %idx
+  %a = load ptr, ptr %ptr
+  indirectbr ptr %a, [ label %bb0, label %bb1, label %bb2, label %bb3 ]
 
 bb0:
   ret i32 2
@@ -534,20 +534,6 @@ define dso_local i32 @test_switch_jumptable(i32 %idx) nounwind {
 ; X64-NEXT:    movl $7, %eax
 ; X64-NEXT:    orq %rcx, %rsp
 ; X64-NEXT:    retq
-; X64-NEXT:  .LBB6_2: # %bb0
-; X64-NEXT:    cmovbeq %rax, %rcx
-; X64-NEXT:    shlq $47, %rcx
-; X64-NEXT:    movl $2, %eax
-; X64-NEXT:    orq %rcx, %rsp
-; X64-NEXT:    retq
-; X64-NEXT:  .LBB6_4: # Block address taken
-; X64-NEXT:    # %bb2
-; X64-NEXT:    cmpq $.LBB6_4, %rdx
-; X64-NEXT:    cmovneq %rax, %rcx
-; X64-NEXT:    shlq $47, %rcx
-; X64-NEXT:    movl $13, %eax
-; X64-NEXT:    orq %rcx, %rsp
-; X64-NEXT:    retq
 ; X64-NEXT:  .LBB6_5: # Block address taken
 ; X64-NEXT:    # %bb3
 ; X64-NEXT:    cmpq $.LBB6_5, %rdx
@@ -562,6 +548,20 @@ define dso_local i32 @test_switch_jumptable(i32 %idx) nounwind {
 ; X64-NEXT:    cmovneq %rax, %rcx
 ; X64-NEXT:    shlq $47, %rcx
 ; X64-NEXT:    movl $11, %eax
+; X64-NEXT:    orq %rcx, %rsp
+; X64-NEXT:    retq
+; X64-NEXT:  .LBB6_4: # Block address taken
+; X64-NEXT:    # %bb2
+; X64-NEXT:    cmpq $.LBB6_4, %rdx
+; X64-NEXT:    cmovneq %rax, %rcx
+; X64-NEXT:    shlq $47, %rcx
+; X64-NEXT:    movl $13, %eax
+; X64-NEXT:    orq %rcx, %rsp
+; X64-NEXT:    retq
+; X64-NEXT:  .LBB6_2: # %bb0
+; X64-NEXT:    cmovbeq %rax, %rcx
+; X64-NEXT:    shlq $47, %rcx
+; X64-NEXT:    movl $2, %eax
 ; X64-NEXT:    orq %rcx, %rsp
 ; X64-NEXT:    retq
 ;
@@ -589,21 +589,6 @@ define dso_local i32 @test_switch_jumptable(i32 %idx) nounwind {
 ; X64-PIC-NEXT:    movl $7, %eax
 ; X64-PIC-NEXT:    orq %rcx, %rsp
 ; X64-PIC-NEXT:    retq
-; X64-PIC-NEXT:  .LBB6_2: # %bb0
-; X64-PIC-NEXT:    cmovbeq %rax, %rcx
-; X64-PIC-NEXT:    shlq $47, %rcx
-; X64-PIC-NEXT:    movl $2, %eax
-; X64-PIC-NEXT:    orq %rcx, %rsp
-; X64-PIC-NEXT:    retq
-; X64-PIC-NEXT:  .LBB6_4: # Block address taken
-; X64-PIC-NEXT:    # %bb2
-; X64-PIC-NEXT:    leaq .LBB6_4(%rip), %rsi
-; X64-PIC-NEXT:    cmpq %rsi, %rdx
-; X64-PIC-NEXT:    cmovneq %rax, %rcx
-; X64-PIC-NEXT:    shlq $47, %rcx
-; X64-PIC-NEXT:    movl $13, %eax
-; X64-PIC-NEXT:    orq %rcx, %rsp
-; X64-PIC-NEXT:    retq
 ; X64-PIC-NEXT:  .LBB6_5: # Block address taken
 ; X64-PIC-NEXT:    # %bb3
 ; X64-PIC-NEXT:    leaq .LBB6_5(%rip), %rsi
@@ -620,6 +605,21 @@ define dso_local i32 @test_switch_jumptable(i32 %idx) nounwind {
 ; X64-PIC-NEXT:    cmovneq %rax, %rcx
 ; X64-PIC-NEXT:    shlq $47, %rcx
 ; X64-PIC-NEXT:    movl $11, %eax
+; X64-PIC-NEXT:    orq %rcx, %rsp
+; X64-PIC-NEXT:    retq
+; X64-PIC-NEXT:  .LBB6_4: # Block address taken
+; X64-PIC-NEXT:    # %bb2
+; X64-PIC-NEXT:    leaq .LBB6_4(%rip), %rsi
+; X64-PIC-NEXT:    cmpq %rsi, %rdx
+; X64-PIC-NEXT:    cmovneq %rax, %rcx
+; X64-PIC-NEXT:    shlq $47, %rcx
+; X64-PIC-NEXT:    movl $13, %eax
+; X64-PIC-NEXT:    orq %rcx, %rsp
+; X64-PIC-NEXT:    retq
+; X64-PIC-NEXT:  .LBB6_2: # %bb0
+; X64-PIC-NEXT:    cmovbeq %rax, %rcx
+; X64-PIC-NEXT:    shlq $47, %rcx
+; X64-PIC-NEXT:    movl $2, %eax
 ; X64-PIC-NEXT:    orq %rcx, %rsp
 ; X64-PIC-NEXT:    retq
 ;
@@ -704,7 +704,7 @@ bb5:
 ; backend so that we can test how the exact jump table lowering behaves, but
 ; also arranges for fallthroughs from case to case to ensure that this pattern
 ; too can be handled.
-define dso_local i32 @test_switch_jumptable_fallthrough(i32 %idx, i32* %a.ptr, i32* %b.ptr, i32* %c.ptr, i32* %d.ptr) nounwind {
+define dso_local i32 @test_switch_jumptable_fallthrough(i32 %idx, ptr %a.ptr, ptr %b.ptr, ptr %c.ptr, ptr %d.ptr) nounwind {
 ; X64-LABEL: test_switch_jumptable_fallthrough:
 ; X64:       # %bb.0: # %entry
 ; X64-NEXT:    movq %rsp, %r9
@@ -872,24 +872,24 @@ entry:
   ]
 
 bb0:
-  %a = load i32, i32* %a.ptr
+  %a = load i32, ptr %a.ptr
   br label %bb1
 
 bb1:
   %b.phi = phi i32 [ 0, %entry ], [ %a, %bb0 ]
-  %b = load i32, i32* %b.ptr
+  %b = load i32, ptr %b.ptr
   %b.sum = add i32 %b.phi, %b
   br label %bb2
 
 bb2:
   %c.phi = phi i32 [ 0, %entry ], [ %b.sum, %bb1 ]
-  %c = load i32, i32* %c.ptr
+  %c = load i32, ptr %c.ptr
   %c.sum = add i32 %c.phi, %c
   br label %bb3
 
 bb3:
   %d.phi = phi i32 [ 0, %entry ], [ %c.sum, %bb2 ]
-  %d = load i32, i32* %d.ptr
+  %d = load i32, ptr %d.ptr
   %d.sum = add i32 %d.phi, %d
   br label %bb4
 

@@ -38,6 +38,10 @@ cl::opt<IndirectCallPromotionType> ICP(
         clEnumValN(ICP_ALL, "all", "perform ICP on calls and jump tables")),
     cl::ZeroOrMore, cl::cat(BoltOptCategory));
 
+static cl::alias ICPAlias("icp",
+                          cl::desc("Alias for --indirect-call-promotion"),
+                          cl::aliasopt(ICP));
+
 extern cl::opt<JumpTableSupportLevel> JumpTables;
 
 static cl::opt<bool> FixFuncCounts(
@@ -221,6 +225,7 @@ void BinaryFunction::mergeProfileDataInto(BinaryFunction &BF) const {
     for (const BinaryBasicBlock *BBSucc : BB->successors()) {
       (void)BBSucc;
       assert(getIndex(BBSucc) == BF.getIndex(*BBMergeSI));
+      (void)BBMergeSI;
 
       // At this point no branch count should be set to COUNT_NO_PROFILE.
       assert(BII->Count != BinaryBasicBlock::COUNT_NO_PROFILE &&
@@ -335,8 +340,6 @@ void BinaryFunction::inferFallThroughCounts() {
       }
     }
   }
-
-  return;
 }
 
 void BinaryFunction::clearProfile() {

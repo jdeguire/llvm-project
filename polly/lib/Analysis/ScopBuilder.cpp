@@ -697,8 +697,7 @@ isl::set ScopBuilder::getPredecessorDomainConstraints(BasicBlock *BB,
 
     // If the predecessor is in a region we used for propagation we can skip it.
     auto PredBBInRegion = [PredBB](Region *PR) { return PR->contains(PredBB); };
-    if (std::any_of(PropagatedRegions.begin(), PropagatedRegions.end(),
-                    PredBBInRegion)) {
+    if (llvm::any_of(PropagatedRegions, PredBBInRegion)) {
       continue;
     }
 
@@ -1440,6 +1439,10 @@ void ScopBuilder::addUserAssumptions(
 }
 
 bool ScopBuilder::buildAccessMultiDimFixed(MemAccInst Inst, ScopStmt *Stmt) {
+  // Memory builtins are not considered in this function.
+  if (!Inst.isLoad() && !Inst.isStore())
+    return false;
+
   Value *Val = Inst.getValueOperand();
   Type *ElementType = Val->getType();
   Value *Address = Inst.getPointerOperand();
@@ -1502,6 +1505,10 @@ bool ScopBuilder::buildAccessMultiDimFixed(MemAccInst Inst, ScopStmt *Stmt) {
 }
 
 bool ScopBuilder::buildAccessMultiDimParam(MemAccInst Inst, ScopStmt *Stmt) {
+  // Memory builtins are not considered by this function.
+  if (!Inst.isLoad() && !Inst.isStore())
+    return false;
+
   if (!PollyDelinearize)
     return false;
 
@@ -1635,31 +1642,16 @@ bool ScopBuilder::buildAccessCallInst(MemAccInst Inst, ScopStmt *Stmt) {
   if (CI->doesNotAccessMemory() || isIgnoredIntrinsic(CI) || isDebugCall(CI))
     return true;
 
-  bool ReadOnly = false;
   auto *AF = SE.getConstant(IntegerType::getInt64Ty(CI->getContext()), 0);
   auto *CalledFunction = CI->getCalledFunction();
-  switch (AA.getModRefBehavior(CalledFunction)) {
-  case FMRB_UnknownModRefBehavior:
-    llvm_unreachable("Unknown mod ref behaviour cannot be represented.");
-  case FMRB_DoesNotAccessMemory:
+  MemoryEffects ME = AA.getMemoryEffects(CalledFunction);
+  if (ME.doesNotAccessMemory())
     return true;
-  case FMRB_OnlyWritesMemory:
-  case FMRB_OnlyWritesInaccessibleMem:
-  case FMRB_OnlyWritesInaccessibleOrArgMem:
-  case FMRB_OnlyAccessesInaccessibleMem:
-  case FMRB_OnlyAccessesInaccessibleOrArgMem:
-    return false;
-  case FMRB_OnlyReadsMemory:
-  case FMRB_OnlyReadsInaccessibleMem:
-  case FMRB_OnlyReadsInaccessibleOrArgMem:
-    GlobalReads.emplace_back(Stmt, CI);
-    return true;
-  case FMRB_OnlyReadsArgumentPointees:
-    ReadOnly = true;
-    LLVM_FALLTHROUGH;
-  case FMRB_OnlyWritesArgumentPointees:
-  case FMRB_OnlyAccessesArgumentPointees: {
-    auto AccType = ReadOnly ? MemoryAccess::READ : MemoryAccess::MAY_WRITE;
+
+  if (ME.onlyAccessesArgPointees()) {
+    ModRefInfo ArgMR = ME.getModRef(IRMemLocation::ArgMem);
+    auto AccType =
+        !isModSet(ArgMR) ? MemoryAccess::READ : MemoryAccess::MAY_WRITE;
     Loop *L = LI.getLoopFor(Inst->getParent());
     for (const auto &Arg : CI->args()) {
       if (!Arg->getType()->isPointerTy())
@@ -1680,12 +1672,19 @@ bool ScopBuilder::buildAccessCallInst(MemAccInst Inst, ScopStmt *Stmt) {
     }
     return true;
   }
-  }
 
-  return true;
+  if (ME.onlyReadsMemory()) {
+    GlobalReads.emplace_back(Stmt, CI);
+    return true;
+  }
+  return false;
 }
 
-void ScopBuilder::buildAccessSingleDim(MemAccInst Inst, ScopStmt *Stmt) {
+bool ScopBuilder::buildAccessSingleDim(MemAccInst Inst, ScopStmt *Stmt) {
+  // Memory builtins are not considered by this function.
+  if (!Inst.isLoad() && !Inst.isStore())
+    return false;
+
   Value *Address = Inst.getPointerOperand();
   Value *Val = Inst.getValueOperand();
   Type *ElementType = Val->getType();
@@ -1727,6 +1726,7 @@ void ScopBuilder::buildAccessSingleDim(MemAccInst Inst, ScopStmt *Stmt) {
 
   addArrayAccess(Stmt, Inst, AccType, BasePointer->getValue(), ElementType,
                  IsAffine, {AccessFunction}, {nullptr}, Val);
+  return true;
 }
 
 void ScopBuilder::buildMemoryAccess(MemAccInst Inst, ScopStmt *Stmt) {
@@ -1742,7 +1742,12 @@ void ScopBuilder::buildMemoryAccess(MemAccInst Inst, ScopStmt *Stmt) {
   if (buildAccessMultiDimParam(Inst, Stmt))
     return;
 
-  buildAccessSingleDim(Inst, Stmt);
+  if (buildAccessSingleDim(Inst, Stmt))
+    return;
+
+  llvm_unreachable(
+      "At least one of the buildAccess functions must handled this access, or "
+      "ScopDetection should have rejected this SCoP");
 }
 
 void ScopBuilder::buildAccessFunctions() {
@@ -2386,7 +2391,7 @@ void ScopBuilder::ensureValueRead(Value *V, ScopStmt *UserStmt) {
     if (!ModelReadOnlyScalars)
       break;
 
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case VirtualUse::Inter:
 
     // Do not create another MemoryAccess for reloading the value if one already
@@ -2483,7 +2488,7 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
   case Instruction::FAdd:
     if (!BinOp->isFast())
       return MemoryAccess::RT_NONE;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Instruction::Add:
     return MemoryAccess::RT_ADD;
   case Instruction::Or:
@@ -2495,7 +2500,7 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
   case Instruction::FMul:
     if (!BinOp->isFast())
       return MemoryAccess::RT_NONE;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Instruction::Mul:
     if (DisableMultiplicativeReductions)
       return MemoryAccess::RT_NONE;
@@ -2503,6 +2508,48 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
   default:
     return MemoryAccess::RT_NONE;
   }
+}
+
+///  True if @p AllAccs intersects with @p MemAccs execpt @p LoadMA and @p
+///  StoreMA
+bool hasIntersectingAccesses(isl::set AllAccs, MemoryAccess *LoadMA,
+                             MemoryAccess *StoreMA, isl::set Domain,
+                             SmallVector<MemoryAccess *, 8> &MemAccs) {
+  bool HasIntersectingAccs = false;
+  for (MemoryAccess *MA : MemAccs) {
+    if (MA == LoadMA || MA == StoreMA)
+      continue;
+
+    isl::map AccRel = MA->getAccessRelation().intersect_domain(Domain);
+    isl::set Accs = AccRel.range();
+
+    if (AllAccs.has_equal_space(Accs)) {
+      isl::set OverlapAccs = Accs.intersect(AllAccs);
+      bool DoesIntersect = !OverlapAccs.is_empty();
+      HasIntersectingAccs |= DoesIntersect;
+    }
+  }
+  return HasIntersectingAccs;
+}
+
+///  Test if the accesses of @p LoadMA and @p StoreMA can form a reduction
+bool checkCandidatePairAccesses(MemoryAccess *LoadMA, MemoryAccess *StoreMA,
+                                isl::set Domain,
+                                SmallVector<MemoryAccess *, 8> &MemAccs) {
+  isl::map LoadAccs = LoadMA->getAccessRelation();
+  isl::map StoreAccs = StoreMA->getAccessRelation();
+
+  // Skip those with obviously unequal base addresses.
+  bool Valid = LoadAccs.has_equal_space(StoreAccs);
+
+  // And check if the remaining for overlap with other memory accesses.
+  if (Valid) {
+    isl::map AllAccsRel = LoadAccs.unite(StoreAccs);
+    AllAccsRel = AllAccsRel.intersect_domain(Domain);
+    isl::set AllAccs = AllAccsRel.range();
+    Valid = !hasIntersectingAccesses(AllAccs, LoadMA, StoreMA, Domain, MemAccs);
+  }
+  return Valid;
 }
 
 void ScopBuilder::checkForReductions(ScopStmt &Stmt) {
@@ -2523,34 +2570,10 @@ void ScopBuilder::checkForReductions(ScopStmt &Stmt) {
 
   // Then check each possible candidate pair.
   for (const auto &CandidatePair : Candidates) {
-    bool Valid = true;
-    isl::map LoadAccs = CandidatePair.first->getAccessRelation();
-    isl::map StoreAccs = CandidatePair.second->getAccessRelation();
-
-    // Skip those with obviously unequal base addresses.
-    if (!LoadAccs.has_equal_space(StoreAccs)) {
-      continue;
-    }
-
-    // And check if the remaining for overlap with other memory accesses.
-    isl::map AllAccsRel = LoadAccs.unite(StoreAccs);
-    AllAccsRel = AllAccsRel.intersect_domain(Stmt.getDomain());
-    isl::set AllAccs = AllAccsRel.range();
-
-    for (MemoryAccess *MA : Stmt) {
-      if (MA == CandidatePair.first || MA == CandidatePair.second)
-        continue;
-
-      isl::map AccRel =
-          MA->getAccessRelation().intersect_domain(Stmt.getDomain());
-      isl::set Accs = AccRel.range();
-
-      if (AllAccs.has_equal_space(Accs)) {
-        isl::set OverlapAccs = Accs.intersect(AllAccs);
-        Valid = Valid && OverlapAccs.is_empty();
-      }
-    }
-
+    MemoryAccess *LoadMA = CandidatePair.first;
+    MemoryAccess *StoreMA = CandidatePair.second;
+    bool Valid = checkCandidatePairAccesses(LoadMA, StoreMA, Stmt.getDomain(),
+                                            Stmt.MemAccs);
     if (!Valid)
       continue;
 
@@ -2561,8 +2584,8 @@ void ScopBuilder::checkForReductions(ScopStmt &Stmt) {
 
     // If no overlapping access was found we mark the load and store as
     // reduction like.
-    CandidatePair.first->markAsReductionLike(RT);
-    CandidatePair.second->markAsReductionLike(RT);
+    LoadMA->markAsReductionLike(RT);
+    StoreMA->markAsReductionLike(RT);
   }
 }
 
@@ -2666,10 +2689,9 @@ void ScopBuilder::addUserContext() {
     if (NameContext != NameUserContext) {
       std::string SpaceStr = stringFromIslObj(Space, "null");
       errs() << "Error: the name of dimension " << i
-             << " provided in -polly-context "
-             << "is '" << NameUserContext << "', but the name in the computed "
-             << "context is '" << NameContext
-             << "'. Due to this name mismatch, "
+             << " provided in -polly-context " << "is '" << NameUserContext
+             << "', but the name in the computed " << "context is '"
+             << NameContext << "'. Due to this name mismatch, "
              << "the -polly-context option is ignored. Please provide "
              << "the context in the parameter space: " << SpaceStr << ".\n";
       return;
@@ -3200,7 +3222,8 @@ bool ScopBuilder::buildAliasChecks() {
 
 std::tuple<ScopBuilder::AliasGroupVectorTy, DenseSet<const ScopArrayInfo *>>
 ScopBuilder::buildAliasGroupsForAccesses() {
-  AliasSetTracker AST(AA);
+  BatchAAResults BAA(AA);
+  AliasSetTracker AST(BAA);
 
   DenseMap<Value *, MemoryAccess *> PtrToAcc;
   DenseSet<const ScopArrayInfo *> HasWriteAccess;

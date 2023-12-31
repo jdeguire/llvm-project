@@ -19,19 +19,32 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/CFLAndersAliasAnalysis.h"
-#include "llvm/Analysis/CFLSteensAliasAnalysis.h"
+#include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
+#include "llvm/CodeGen/CallBrPrepare.h"
+#include "llvm/CodeGen/DwarfEHPrepare.h"
+#include "llvm/CodeGen/ExpandMemCmp.h"
 #include "llvm/CodeGen/ExpandReductions.h"
+#include "llvm/CodeGen/GCMetadata.h"
+#include "llvm/CodeGen/IndirectBrExpand.h"
+#include "llvm/CodeGen/InterleavedAccess.h"
+#include "llvm/CodeGen/InterleavedLoadCombine.h"
+#include "llvm/CodeGen/JMCInstrumenter.h"
+#include "llvm/CodeGen/LowerEmuTLS.h"
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/PreISelIntrinsicLowering.h"
 #include "llvm/CodeGen/ReplaceWithVeclib.h"
+#include "llvm/CodeGen/SafeStack.h"
+#include "llvm/CodeGen/SelectOptimize.h"
+#include "llvm/CodeGen/SjLjEHPrepare.h"
 #include "llvm/CodeGen/UnreachableBlockElim.h"
-#include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/CodeGen/WasmEHPrepare.h"
+#include "llvm/CodeGen/WinEHPrepare.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IRPrinter/IRPrintingPasses.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/CodeGen.h"
@@ -40,6 +53,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/CGPassBuilderOption.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/CFGuard.h"
 #include "llvm/Transforms/Scalar/ConstantHoisting.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopStrengthReduce.h"
@@ -64,15 +78,8 @@ namespace llvm {
       return PreservedAnalyses::all();                                         \
     }                                                                          \
   };
-#define DUMMY_MODULE_PASS(NAME, PASS_NAME, CONSTRUCTOR)                        \
-  struct PASS_NAME : public PassInfoMixin<PASS_NAME> {                         \
-    template <typename... Ts> PASS_NAME(Ts &&...) {}                           \
-    PreservedAnalyses run(Module &, ModuleAnalysisManager &) {                 \
-      return PreservedAnalyses::all();                                         \
-    }                                                                          \
-  };
 #define DUMMY_MACHINE_MODULE_PASS(NAME, PASS_NAME, CONSTRUCTOR)                \
-  struct PASS_NAME : public PassInfoMixin<PASS_NAME> {                         \
+  struct PASS_NAME : public MachinePassInfoMixin<PASS_NAME> {                  \
     template <typename... Ts> PASS_NAME(Ts &&...) {}                           \
     Error run(Module &, MachineFunctionAnalysisManager &) {                    \
       return Error::success();                                                 \
@@ -81,18 +88,29 @@ namespace llvm {
                           MachineFunctionAnalysisManager &) {                  \
       llvm_unreachable("this api is to make new PM api happy");                \
     }                                                                          \
-    static AnalysisKey Key;                                                    \
+    static MachinePassKey Key;                                                 \
   };
 #define DUMMY_MACHINE_FUNCTION_PASS(NAME, PASS_NAME, CONSTRUCTOR)              \
-  struct PASS_NAME : public PassInfoMixin<PASS_NAME> {                         \
+  struct PASS_NAME : public MachinePassInfoMixin<PASS_NAME> {                  \
     template <typename... Ts> PASS_NAME(Ts &&...) {}                           \
     PreservedAnalyses run(MachineFunction &,                                   \
                           MachineFunctionAnalysisManager &) {                  \
       return PreservedAnalyses::all();                                         \
     }                                                                          \
+    static MachinePassKey Key;                                                 \
+  };
+#define DUMMY_MACHINE_FUNCTION_ANALYSIS(NAME, PASS_NAME, CONSTRUCTOR)          \
+  struct PASS_NAME : public AnalysisInfoMixin<PASS_NAME> {                     \
+    template <typename... Ts> PASS_NAME(Ts &&...) {}                           \
+    using Result = struct {};                                                  \
+    template <typename IRUnitT, typename AnalysisManagerT,                     \
+              typename... ExtraArgTs>                                          \
+    Result run(IRUnitT &, AnalysisManagerT &, ExtraArgTs &&...) {              \
+      return {};                                                               \
+    }                                                                          \
     static AnalysisKey Key;                                                    \
   };
-#include "MachinePassRegistry.def"
+#include "llvm/CodeGen/MachinePassRegistry.def"
 
 /// This class provides access to building LLVM's passes.
 ///
@@ -117,7 +135,7 @@ public:
       TM.Options.GlobalISelAbort = *Opt.EnableGlobalISelAbort;
 
     if (!Opt.OptimizeRegAlloc)
-      Opt.OptimizeRegAlloc = getOptLevel() != CodeGenOpt::None;
+      Opt.OptimizeRegAlloc = getOptLevel() != CodeGenOptLevel::None;
   }
 
   Error buildPipeline(ModulePassManager &MPM, MachineFunctionPassManager &MFPM,
@@ -191,7 +209,7 @@ protected:
     // This special-casing introduces less adaptor passes. If we have the need
     // of adding module passes after function passes, we could change the
     // implementation to accommodate that.
-    Optional<bool> AddingFunctionPasses;
+    std::optional<bool> AddingFunctionPasses;
   };
 
   // Function object to maintain state while adding codegen machine passes.
@@ -245,7 +263,7 @@ protected:
   }
 
   template <typename TMC> TMC &getTM() const { return static_cast<TMC &>(TM); }
-  CodeGenOpt::Level getOptLevel() const { return TM.getOptLevel(); }
+  CodeGenOptLevel getOptLevel() const { return TM.getOptLevel(); }
 
   /// Check whether or not GlobalISel should abort on error.
   /// When this is disabled, GlobalISel will fall back on SDISel instead of
@@ -290,7 +308,7 @@ protected:
   /// all virtual registers.
   ///
   /// Note if the target overloads addRegAssignAndRewriteOptimized, this may not
-  /// be honored. This is also not generally used for the the fast variant,
+  /// be honored. This is also not generally used for the fast variant,
   /// where the allocation and rewriting are done in one pass.
   void addPreRewrite(AddMachinePass &) const {}
 
@@ -465,6 +483,8 @@ Error CodeGenPassBuilder<Derived>::buildPipeline(
     raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,
     CodeGenFileType FileType) const {
   AddIRPass addIRPass(MPM, Opt.DebugPM);
+  // `ProfileSummaryInfo` is always valid.
+  addIRPass(RequireAnalysisPass<ProfileSummaryAnalysis, Module>());
   addISelPasses(addIRPass);
 
   AddMachinePass addPass(MFPM);
@@ -483,26 +503,11 @@ Error CodeGenPassBuilder<Derived>::buildPipeline(
   return Error::success();
 }
 
-static inline AAManager registerAAAnalyses(CFLAAType UseCFLAA) {
+static inline AAManager registerAAAnalyses() {
   AAManager AA;
 
   // The order in which these are registered determines their priority when
   // being queried.
-
-  switch (UseCFLAA) {
-  case CFLAAType::Steensgaard:
-    AA.registerFunctionAnalysis<CFLSteensAA>();
-    break;
-  case CFLAAType::Andersen:
-    AA.registerFunctionAnalysis<CFLAndersAA>();
-    break;
-  case CFLAAType::Both:
-    AA.registerFunctionAnalysis<CFLAndersAA>();
-    AA.registerFunctionAnalysis<CFLSteensAA>();
-    break;
-  default:
-    break;
-  }
 
   // Basic AliasAnalysis support.
   // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
@@ -527,7 +532,7 @@ void CodeGenPassBuilder<Derived>::registerModuleAnalyses(
 template <typename Derived>
 void CodeGenPassBuilder<Derived>::registerFunctionAnalyses(
     FunctionAnalysisManager &FAM) const {
-  FAM.registerPass([this] { return registerAAAnalyses(this->Opt.UseCFLAA); });
+  FAM.registerPass([this] { return registerAAAnalyses(); });
 
 #define FUNCTION_ANALYSIS(NAME, PASS_NAME, CONSTRUCTOR)                        \
   FAM.registerPass([&] { return PASS_NAME CONSTRUCTOR; });
@@ -596,7 +601,7 @@ void CodeGenPassBuilder<Derived>::addISelPasses(AddIRPass &addPass) const {
   if (TM.useEmulatedTLS())
     addPass(LowerEmuTLSPass());
 
-  addPass(PreISelIntrinsicLoweringPass());
+  addPass(PreISelIntrinsicLoweringPass(TM));
 
   derived().addIRPasses(addPass);
   derived().addCodeGenPrepare(addPass);
@@ -614,7 +619,7 @@ void CodeGenPassBuilder<Derived>::addIRPasses(AddIRPass &addPass) const {
     addPass(VerifierPass());
 
   // Run loop strength reduction before anything else.
-  if (getOptLevel() != CodeGenOpt::None && !Opt.DisableLSR) {
+  if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableLSR) {
     addPass(createFunctionToLoopPassAdaptor(
         LoopStrengthReducePass(), /*UseMemorySSA*/ true, Opt.DebugPM));
     // FIXME: use -stop-after so we could remove PrintLSR
@@ -622,14 +627,14 @@ void CodeGenPassBuilder<Derived>::addIRPasses(AddIRPass &addPass) const {
       addPass(PrintFunctionPass(dbgs(), "\n\n*** Code after LSR ***\n"));
   }
 
-  if (getOptLevel() != CodeGenOpt::None) {
+  if (getOptLevel() != CodeGenOptLevel::None) {
     // The MergeICmpsPass tries to create memcmp calls by grouping sequences of
     // loads and compares. ExpandMemCmpPass then tries to expand those calls
     // into optimally-sized loads and compares. The transforms are enabled by a
     // target lowering hook.
     if (!Opt.DisableMergeICmps)
       addPass(MergeICmpsPass());
-    addPass(ExpandMemCmpPass());
+    addPass(ExpandMemCmpPass(&TM));
   }
 
   // Run GC lowering passes for builtin collectors
@@ -642,15 +647,16 @@ void CodeGenPassBuilder<Derived>::addIRPasses(AddIRPass &addPass) const {
   addPass(UnreachableBlockElimPass());
 
   // Prepare expensive constants for SelectionDAG.
-  if (getOptLevel() != CodeGenOpt::None && !Opt.DisableConstantHoisting)
+  if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableConstantHoisting)
     addPass(ConstantHoistingPass());
 
   // Replace calls to LLVM intrinsics (e.g., exp, log) operating on vector
   // operands with calls to the corresponding functions in a vector library.
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOptLevel::None)
     addPass(ReplaceWithVeclib());
 
-  if (getOptLevel() != CodeGenOpt::None && !Opt.DisablePartialLibcallInlining)
+  if (getOptLevel() != CodeGenOptLevel::None &&
+      !Opt.DisablePartialLibcallInlining)
     addPass(PartiallyInlineLibCallsPass());
 
   // Instrument function entry and exit, e.g. with calls to mcount().
@@ -665,8 +671,8 @@ void CodeGenPassBuilder<Derived>::addIRPasses(AddIRPass &addPass) const {
   addPass(ExpandReductionsPass());
 
   // Convert conditional moves to conditional jumps when profitable.
-  if (getOptLevel() != CodeGenOpt::None && !Opt.DisableSelectOptimize)
-    addPass(SelectOptimizePass());
+  if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableSelectOptimize)
+    addPass(SelectOptimizePass(&TM));
 }
 
 /// Turn exception handling constructs into something the code generators can
@@ -684,27 +690,28 @@ void CodeGenPassBuilder<Derived>::addPassesToHandleExceptions(
     // removed from the parent invoke(s). This could happen when a landing
     // pad is shared by multiple invokes and is also a target of a normal
     // edge from elsewhere.
-    addPass(SjLjEHPreparePass());
-    LLVM_FALLTHROUGH;
+    addPass(SjLjEHPreparePass(&TM));
+    [[fallthrough]];
   case ExceptionHandling::DwarfCFI:
   case ExceptionHandling::ARM:
   case ExceptionHandling::AIX:
-    addPass(DwarfEHPass(getOptLevel()));
+  case ExceptionHandling::ZOS:
+    addPass(DwarfEHPreparePass(&TM));
     break;
   case ExceptionHandling::WinEH:
     // We support using both GCC-style and MSVC-style exceptions on Windows, so
     // add both preparation passes. Each pass will only actually run if it
     // recognizes the personality function.
-    addPass(WinEHPass());
-    addPass(DwarfEHPass(getOptLevel()));
+    addPass(WinEHPreparePass());
+    addPass(DwarfEHPreparePass(&TM));
     break;
   case ExceptionHandling::Wasm:
     // Wasm EH uses Windows EH instructions, but it does not need to demote PHIs
     // on catchpads and cleanuppads because it does not outline them into
     // funclets. Catchswitch blocks are not lowered in SelectionDAG, so we
     // should remove PHIs there.
-    addPass(WinEHPass(/*DemoteCatchSwitchPHIOnly=*/false));
-    addPass(WasmEHPass());
+    addPass(WinEHPreparePass(/*DemoteCatchSwitchPHIOnly=*/false));
+    addPass(WasmEHPreparePass());
     break;
   case ExceptionHandling::None:
     addPass(LowerInvokePass());
@@ -719,7 +726,7 @@ void CodeGenPassBuilder<Derived>::addPassesToHandleExceptions(
 /// before exception handling preparation passes.
 template <typename Derived>
 void CodeGenPassBuilder<Derived>::addCodeGenPrepare(AddIRPass &addPass) const {
-  if (getOptLevel() != CodeGenOpt::None && !Opt.DisableCGP)
+  if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableCGP)
     addPass(CodeGenPreparePass());
   // TODO: Default ctor'd RewriteSymbolPass is no-op.
   // addPass(RewriteSymbolPass());
@@ -731,9 +738,10 @@ template <typename Derived>
 void CodeGenPassBuilder<Derived>::addISelPrepare(AddIRPass &addPass) const {
   derived().addPreISel(addPass);
 
+  addPass(CallBrPreparePass());
   // Add both the safe stack and the stack protection passes: each of them will
   // only protect functions that have corresponding attributes.
-  addPass(SafeStackPass());
+  addPass(SafeStackPass(&TM));
   addPass(StackProtectorPass());
 
   if (Opt.PrintISelInput)
@@ -764,7 +772,7 @@ Error CodeGenPassBuilder<Derived>::addCoreISelPasses(
             (!Opt.EnableGlobalISelOption ||
              *Opt.EnableGlobalISelOption == false)))
     Selector = SelectorType::GlobalISel;
-  else if (TM.getOptLevel() == CodeGenOpt::None && TM.getO0WantsFastISel())
+  else if (TM.getOptLevel() == CodeGenOptLevel::None && TM.getO0WantsFastISel())
     Selector = SelectorType::FastISel;
   else
     Selector = SelectorType::SelectionDAG;
@@ -842,7 +850,7 @@ template <typename Derived>
 Error CodeGenPassBuilder<Derived>::addMachinePasses(
     AddMachinePass &addPass) const {
   // Add passes that optimize machine instructions in SSA form.
-  if (getOptLevel() != CodeGenOpt::None) {
+  if (getOptLevel() != CodeGenOptLevel::None) {
     derived().addMachineSSAOptimization(addPass);
   } else {
     // If the target requests it, assign local variables to stack slots relative
@@ -871,7 +879,7 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
   addPass(RemoveRedundantDebugValuesPass());
 
   // Insert prolog/epilog code.  Eliminate abstract frame index references...
-  if (getOptLevel() != CodeGenOpt::None) {
+  if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(PostRAMachineSinkingPass());
     addPass(ShrinkWrapPass());
   }
@@ -879,7 +887,7 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
   addPass(PrologEpilogInserterPass());
 
   /// Add passes that optimize machine instructions after register allocation.
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOptLevel::None)
     derived().addMachineLateOptimization(addPass);
 
   // Expand pseudo instructions before second scheduling pass.
@@ -894,7 +902,7 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
   // Second pass scheduler.
   // Let Target optionally insert this pass by itself at some other
   // point.
-  if (getOptLevel() != CodeGenOpt::None &&
+  if (getOptLevel() != CodeGenOptLevel::None &&
       !TM.targetSchedulesPostRAScheduling()) {
     if (Opt.MISchedPostRA)
       addPass(PostMachineSchedulerPass());
@@ -906,7 +914,7 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
   derived().addGCPasses(addPass);
 
   // Basic block placement.
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOptLevel::None)
     derived().addBlockPlacement(addPass);
 
   // Insert before XRay Instrumentation.
@@ -926,8 +934,10 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
 
   addPass(StackMapLivenessPass());
   addPass(LiveDebugValuesPass());
+  addPass(MachineSanitizerBinaryMetadata());
 
-  if (TM.Options.EnableMachineOutliner && getOptLevel() != CodeGenOpt::None &&
+  if (TM.Options.EnableMachineOutliner &&
+      getOptLevel() != CodeGenOptLevel::None &&
       Opt.EnableMachineOutliner != RunOutliner::NeverOutline) {
     bool RunOnAllFunctions =
         (Opt.EnableMachineOutliner == RunOutliner::AlwaysOutline);
@@ -1129,6 +1139,9 @@ void CodeGenPassBuilder<Derived>::addMachineLateOptimization(
   // In addition it can also make CFG irreducible. Thus we disable it.
   if (!TM.requiresStructuredCFG())
     addPass(TailDuplicatePass());
+
+  // Cleanup of redundant (identical) address/immediate loads.
+  addPass(MachineLateInstrsCleanupPass());
 
   // Copy propagation.
   addPass(MachineCopyPropagationPass());

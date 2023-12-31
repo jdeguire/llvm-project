@@ -12,13 +12,16 @@
 #include "Plugins/SymbolFile/DWARF/DIERef.h"
 #include "Plugins/SymbolFile/DWARF/DWARFDIE.h"
 #include "Plugins/SymbolFile/DWARF/DWARFFormValue.h"
+#include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 
+#include "lldb/Core/Module.h"
 #include "lldb/Target/Statistics.h"
 
+namespace lldb_private::plugin {
+namespace dwarf {
 class DWARFDeclContext;
 class DWARFDIE;
 
-namespace lldb_private {
 class DWARFIndex {
 public:
   DWARFIndex(Module &module) : m_module(module) {}
@@ -54,9 +57,8 @@ public:
   GetNamespaces(ConstString name,
                 llvm::function_ref<bool(DWARFDIE die)> callback) = 0;
   virtual void
-  GetFunctions(ConstString name, SymbolFileDWARF &dwarf,
+  GetFunctions(const Module::LookupInfo &lookup_info, SymbolFileDWARF &dwarf,
                const CompilerDeclContext &parent_decl_ctx,
-               uint32_t name_type_mask,
                llvm::function_ref<bool(DWARFDIE die)> callback) = 0;
   virtual void
   GetFunctions(const RegularExpression &regex,
@@ -74,10 +76,9 @@ protected:
   /// the function given by "ref" matches search criteria given by
   /// "parent_decl_ctx" and "name_type_mask", it is inserted into the "dies"
   /// vector.
-  bool ProcessFunctionDIE(llvm::StringRef name, DIERef ref,
+  bool ProcessFunctionDIE(const Module::LookupInfo &lookup_info, DIERef ref,
                           SymbolFileDWARF &dwarf,
                           const CompilerDeclContext &parent_decl_ctx,
-                          uint32_t name_type_mask,
                           llvm::function_ref<bool(DWARFDIE die)> callback);
 
   class DIERefCallbackImpl {
@@ -86,6 +87,7 @@ protected:
                        llvm::function_ref<bool(DWARFDIE die)> callback,
                        llvm::StringRef name);
     bool operator()(DIERef ref) const;
+    bool operator()(const llvm::AppleAcceleratorTable::Entry &entry) const;
 
   private:
     const DWARFIndex &m_index;
@@ -101,6 +103,7 @@ protected:
 
   void ReportInvalidDIERef(DIERef ref, llvm::StringRef name) const;
 };
-} // namespace lldb_private
+} // namespace dwarf
+} // namespace lldb_private::plugin
 
 #endif // LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFINDEX_H

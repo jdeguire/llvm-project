@@ -1,16 +1,16 @@
 // REQUIRES: powerpc-registered-target
 
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64le-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify -D __TEST_ELT_SI
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify -D __TEST_ELT_F
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64le-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify -D __TEST_ELT_SLL
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify -D __TEST_ELT_D
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64le-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify -D __TEST_UNALIGNED_UI
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 \
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +vsx -target-cpu pwr10 -fsyntax-only \
 // RUN:   -triple powerpc64-unknown-unknown -emit-llvm -ferror-limit 10 %s -verify
 
 #include <altivec.h>
@@ -49,12 +49,12 @@ vector double test_vec_replace_elt_d(void) {
 }
 
 #elif defined(__TEST_UNALIGNED_UI)
-vector unsigned int test_vec_replace_unaligned_ui(void) {
+vector unsigned char test_vec_replace_unaligned_ui(void) {
   return vec_replace_unaligned(vuia, uia, 16); // expected-error {{byte number 16 is outside of the valid range [0, 12]}}
 }
 
 #else
-vector unsigned long long test_vec_replace_unaligned_ull(void) {
+vector unsigned char test_vec_replace_unaligned_ull(void) {
   return vec_replace_unaligned(vulla, ulla, 12); // expected-error {{byte number 12 is outside of the valid range [0, 8]}}
 }
 #endif

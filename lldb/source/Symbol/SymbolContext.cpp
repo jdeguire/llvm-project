@@ -8,6 +8,8 @@
 
 #include "lldb/Symbol/SymbolContext.h"
 
+#include "lldb/Core/Address.h"
+#include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/Host.h"
@@ -18,10 +20,12 @@
 #include "lldb/Symbol/SymbolFile.h"
 #include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Symbol/Variable.h"
+#include "lldb/Target/Language.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
+#include "lldb/lldb-enumerations.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -68,7 +72,8 @@ bool SymbolContext::DumpStopContext(Stream *s, ExecutionContextScope *exe_scope,
                                     const Address &addr, bool show_fullpaths,
                                     bool show_module, bool show_inlined_frames,
                                     bool show_function_arguments,
-                                    bool show_function_name) const {
+                                    bool show_function_name,
+                                    llvm::StringRef pattern) const {
   bool dumped_something = false;
   if (show_module && module_sp) {
     if (show_fullpaths)
@@ -78,7 +83,6 @@ bool SymbolContext::DumpStopContext(Stream *s, ExecutionContextScope *exe_scope,
     s->PutChar('`');
     dumped_something = true;
   }
-
   if (function != nullptr) {
     SymbolContext inline_parent_sc;
     Address inline_parent_addr;
@@ -91,8 +95,16 @@ bool SymbolContext::DumpStopContext(Stream *s, ExecutionContextScope *exe_scope,
         name = function->GetNameNoArguments();
       if (!name)
         name = function->GetName();
-      if (name)
-        name.Dump(s);
+      if (name) {
+        llvm::StringRef ansi_prefix;
+        llvm::StringRef ansi_suffix;
+        if (target_sp) {
+          ansi_prefix = target_sp->GetDebugger().GetRegexMatchAnsiPrefix();
+          ansi_suffix = target_sp->GetDebugger().GetRegexMatchAnsiSuffix();
+        }
+        s->PutCStringColorHighlighted(name.GetStringRef(), pattern, ansi_prefix,
+                                      ansi_suffix);
+      }
     }
 
     if (addr.IsValid()) {
@@ -160,7 +172,14 @@ bool SymbolContext::DumpStopContext(Stream *s, ExecutionContextScope *exe_scope,
       dumped_something = true;
       if (symbol->GetType() == eSymbolTypeTrampoline)
         s->PutCString("symbol stub for: ");
-      symbol->GetName().Dump(s);
+      llvm::StringRef ansi_prefix;
+      llvm::StringRef ansi_suffix;
+      if (target_sp) {
+        ansi_prefix = target_sp->GetDebugger().GetRegexMatchAnsiPrefix();
+        ansi_suffix = target_sp->GetDebugger().GetRegexMatchAnsiSuffix();
+      }
+      s->PutCStringColorHighlighted(symbol->GetName().GetStringRef(), pattern,
+                                    ansi_prefix, ansi_suffix);
     }
 
     if (addr.IsValid() && symbol->ValueIsAddress()) {
@@ -183,7 +202,8 @@ bool SymbolContext::DumpStopContext(Stream *s, ExecutionContextScope *exe_scope,
 }
 
 void SymbolContext::GetDescription(Stream *s, lldb::DescriptionLevel level,
-                                   Target *target) const {
+                                   Target *target,
+                                   llvm::StringRef pattern) const {
   if (module_sp) {
     s->Indent("     Module: file = \"");
     module_sp->GetFileSpec().Dump(s->AsRawOstream());
@@ -243,7 +263,7 @@ void SymbolContext::GetDescription(Stream *s, lldb::DescriptionLevel level,
 
   if (symbol != nullptr) {
     s->Indent("     Symbol: ");
-    symbol->GetDescription(s, level, target);
+    symbol->GetDescription(s, level, target, pattern);
     s->EOL();
   }
 
@@ -494,20 +514,16 @@ bool SymbolContext::GetParentOfInlinedScope(const Address &curr_frame_pc,
               objfile = symbol_file->GetObjectFile();
           }
           if (objfile) {
-            Host::SystemLog(
-                Host::eSystemLogWarning,
-                "warning: inlined block 0x%8.8" PRIx64
-                " doesn't have a range that contains file address 0x%" PRIx64
-                " in %s\n",
+            Debugger::ReportWarning(llvm::formatv(
+                "inlined block {0:x} doesn't have a range that contains file "
+                "address {1:x} in {2}",
                 curr_inlined_block->GetID(), curr_frame_pc.GetFileAddress(),
-                objfile->GetFileSpec().GetPath().c_str());
+                objfile->GetFileSpec().GetPath()));
           } else {
-            Host::SystemLog(
-                Host::eSystemLogWarning,
-                "warning: inlined block 0x%8.8" PRIx64
-                " doesn't have a range that contains file address 0x%" PRIx64
-                "\n",
-                curr_inlined_block->GetID(), curr_frame_pc.GetFileAddress());
+            Debugger::ReportWarning(llvm::formatv(
+                "inlined block {0:x} doesn't have a range that contains file "
+                "address {1:x}",
+                curr_inlined_block->GetID(), curr_frame_pc.GetFileAddress()));
           }
         }
 #endif
@@ -542,19 +558,20 @@ Block *SymbolContext::GetFunctionBlock() {
   return nullptr;
 }
 
-bool SymbolContext::GetFunctionMethodInfo(lldb::LanguageType &language,
-                                          bool &is_instance_method,
-                                          ConstString &language_object_name)
+llvm::StringRef SymbolContext::GetInstanceVariableName() {
+  LanguageType lang_type = eLanguageTypeUnknown;
 
-{
-  Block *function_block = GetFunctionBlock();
-  if (function_block) {
-    CompilerDeclContext decl_ctx = function_block->GetDeclContext();
-    if (decl_ctx)
-      return decl_ctx.IsClassMethod(&language, &is_instance_method,
-                                    &language_object_name);
-  }
-  return false;
+  if (Block *function_block = GetFunctionBlock())
+    if (CompilerDeclContext decl_ctx = function_block->GetDeclContext())
+      lang_type = decl_ctx.GetLanguage();
+
+  if (lang_type == eLanguageTypeUnknown)
+    lang_type = GetLanguage();
+
+  if (auto *lang = Language::FindPlugin(lang_type))
+    return lang->GetInstanceVariableName();
+
+  return {};
 }
 
 void SymbolContext::SortTypeList(TypeMap &type_map, TypeList &type_list) const {
@@ -771,14 +788,11 @@ const Symbol *SymbolContext::FindBestGlobalDataSymbol(ConstString name,
   Module *module = module_sp.get();
 
   auto ProcessMatches = [this, &name, &target,
-                         module](SymbolContextList &sc_list,
+                         module](const SymbolContextList &sc_list,
                                  Status &error) -> const Symbol * {
     llvm::SmallVector<const Symbol *, 1> external_symbols;
     llvm::SmallVector<const Symbol *, 1> internal_symbols;
-    const uint32_t matches = sc_list.GetSize();
-    for (uint32_t i = 0; i < matches; ++i) {
-      SymbolContext sym_ctx;
-      sc_list.GetContextAtIndex(i, sym_ctx);
+    for (const SymbolContext &sym_ctx : sc_list) {
       if (sym_ctx.symbol) {
         const Symbol *symbol = sym_ctx.symbol;
         const Address sym_address = symbol->GetAddress();
@@ -815,9 +829,7 @@ const Symbol *SymbolContext::FindBestGlobalDataSymbol(ConstString name,
                 reexport_module_sp =
                     target.GetImages().FindFirstModule(reexport_module_spec);
                 if (!reexport_module_sp) {
-                  reexport_module_spec.GetPlatformFileSpec()
-                      .GetDirectory()
-                      .Clear();
+                  reexport_module_spec.GetPlatformFileSpec().ClearDirectory();
                   reexport_module_sp =
                       target.GetImages().FindFirstModule(reexport_module_spec);
                 }

@@ -1,4 +1,4 @@
-if (MLIR_ENABLE_CUDA_CONVERSIONS)
+if ("NVPTX" IN_LIST LLVM_TARGETS_TO_BUILD)
   set(NVPTX_LIBS
     NVPTXCodeGen
     NVPTXDesc
@@ -9,6 +9,7 @@ endif()
 if (MLIR_ENABLE_ROCM_CONVERSIONS)
   set(AMDGPU_LIBS
     IRReader
+    IPO
     linker
     MCParser
     AMDGPUAsmParser
@@ -19,8 +20,9 @@ if (MLIR_ENABLE_ROCM_CONVERSIONS)
   )
 endif()
 
-add_mlir_dialect_library(MLIRGPUOps
+add_mlir_dialect_library(MLIRGPUDialect
   IR/GPUDialect.cpp
+  IR/InferIntRangeInterfaceImpls.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Dialect/GPU
@@ -30,10 +32,13 @@ add_mlir_dialect_library(MLIRGPUOps
   MLIRGPUOpsAttributesIncGen
   MLIRGPUOpsEnumsGen
   MLIRGPUOpInterfacesIncGen
+  MLIRGPUCompilationAttrInterfacesIncGen
 
   LINK_LIBS PUBLIC
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRDLTIDialect
+  MLIRFunctionInterfaces
+  MLIRInferIntRangeInterface
   MLIRIR
   MLIRMemRefDialect
   MLIRSideEffectInterfaces
@@ -43,12 +48,22 @@ add_mlir_dialect_library(MLIRGPUOps
 add_mlir_dialect_library(MLIRGPUTransforms
   Transforms/AllReduceLowering.cpp
   Transforms/AsyncRegionRewriter.cpp
+  Transforms/BufferDeallocationOpInterfaceImpl.cpp
+  Transforms/DecomposeMemrefs.cpp
+  Transforms/EliminateBarriers.cpp
+  Transforms/GlobalIdRewriter.cpp
   Transforms/KernelOutlining.cpp
   Transforms/MemoryPromotion.cpp
+  Transforms/ModuleToBinary.cpp
+  Transforms/NVVMAttachTarget.cpp
   Transforms/ParallelLoopMapper.cpp
+  Transforms/ROCDLAttachTarget.cpp
   Transforms/SerializeToBlob.cpp
   Transforms/SerializeToCubin.cpp
   Transforms/SerializeToHsaco.cpp
+  Transforms/ShuffleRewriter.cpp
+  Transforms/SPIRVAttachTarget.cpp
+  Transforms/SubgroupReduceLowering.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Dialect/GPU
@@ -56,6 +71,7 @@ add_mlir_dialect_library(MLIRGPUTransforms
   LINK_COMPONENTS
   Core
   MC
+  Target
   ${NVPTX_LIBS}
   ${AMDGPU_LIBS}
 
@@ -65,20 +81,32 @@ add_mlir_dialect_library(MLIRGPUTransforms
 
   LINK_LIBS PUBLIC
   MLIRAffineUtils
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRAsyncDialect
+  MLIRBufferizationDialect
+  MLIRBuiltinToLLVMIRTranslation
   MLIRDataLayoutInterfaces
   MLIRExecutionEngineUtils
-  MLIRGPUOps
+  MLIRGPUDialect
   MLIRIR
+  MLIRIndexDialect
   MLIRLLVMDialect
+  MLIRGPUToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation
   MLIRMemRefDialect
+  MLIRNVVMTarget
   MLIRPass
   MLIRSCFDialect
+  MLIRSideEffectInterfaces
+  MLIRSPIRVTarget
   MLIRSupport
+  MLIRROCDLTarget
   MLIRTransformUtils
+  MLIRVectorDialect
   )
+
+add_subdirectory(TransformOps)
+add_subdirectory(Pipelines)
 
 if(MLIR_ENABLE_CUDA_RUNNER)
   if(NOT MLIR_ENABLE_CUDA_CONVERSIONS)
@@ -109,12 +137,15 @@ if(MLIR_ENABLE_CUDA_RUNNER)
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
   )
 
-  find_library(CUDA_DRIVER_LIBRARY cuda)
+  # Add link path for the cuda driver library.
+  find_library(CUDA_DRIVER_LIBRARY cuda HINTS ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} REQUIRED)
+  get_filename_component(CUDA_DRIVER_LIBRARY_PATH "${CUDA_DRIVER_LIBRARY}" DIRECTORY)
+  target_link_directories(MLIRGPUTransforms PRIVATE ${CUDA_DRIVER_LIBRARY_PATH})
 
   target_link_libraries(MLIRGPUTransforms
     PRIVATE
     MLIRNVVMToLLVMIRTranslation
-    ${CUDA_DRIVER_LIBRARY}
+    cuda
   )
 
 endif()
@@ -134,7 +165,6 @@ if(MLIR_ENABLE_ROCM_CONVERSIONS)
 
   target_link_libraries(MLIRGPUTransforms
     PRIVATE
-    MLIRExecutionEngine
     MLIRROCDLToLLVMIRTranslation
   )
 endif()

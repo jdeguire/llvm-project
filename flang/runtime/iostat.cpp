@@ -87,7 +87,7 @@ const char *IostatErrorString(int iostat) {
     return "READ/WRITE(ASYNCHRONOUS='YES') on unit without "
            "OPEN(ASYNCHRONOUS='YES')";
   case IostatBadWaitUnit:
-    return "WAIT(UNIT=) for a bad unit number";
+    return "WAIT(UNIT=) for a bad or unconnected unit number";
   case IostatBOZInputOverflow:
     return "B/O/Z input value overflows variable";
   case IostatIntegerInputOverflow:
@@ -107,6 +107,16 @@ const char *IostatErrorString(int iostat) {
     return "BACKSPACE on unconnected unit";
   case IostatBadUnitNumber:
     return "Negative unit number is not allowed";
+  case IostatBadFlushUnit:
+    return "FLUSH attempted on a bad or unconnected unit number";
+  case IostatBadOpOnChildUnit:
+    return "Impermissible I/O statement on child I/O unit";
+  case IostatBadNewUnit:
+    return "NEWUNIT= without FILE= or STATUS='SCRATCH'";
+  case IostatBadListDirectedInputSeparator:
+    return "List-directed input value has trailing unused characters";
+  case IostatNonExternalDefinedUnformattedIo:
+    return "Defined unformatted I/O without an external unit";
   default:
     return nullptr;
   }

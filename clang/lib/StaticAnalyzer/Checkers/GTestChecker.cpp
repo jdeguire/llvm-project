@@ -20,6 +20,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
 #include "llvm/Support/raw_ostream.h"
+#include <optional>
 
 using namespace clang;
 using namespace ento;
@@ -91,11 +92,11 @@ using namespace ento;
 namespace {
 class GTestChecker : public Checker<check::PostCall> {
 
-  mutable IdentifierInfo *AssertionResultII;
-  mutable IdentifierInfo *SuccessII;
+  mutable IdentifierInfo *AssertionResultII = nullptr;
+  mutable IdentifierInfo *SuccessII = nullptr;
 
 public:
-  GTestChecker();
+  GTestChecker() = default;
 
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const;
 
@@ -118,8 +119,6 @@ private:
                                            CheckerContext &C);
 };
 } // End anonymous namespace.
-
-GTestChecker::GTestChecker() : AssertionResultII(nullptr), SuccessII(nullptr) {}
 
 /// Model a call to an un-inlined AssertionResult(bool) or
 /// AssertionResult(bool &, ...).
@@ -258,7 +257,7 @@ SVal GTestChecker::getAssertionResultSuccessFieldValue(
   if (!SuccessField)
     return UnknownVal();
 
-  Optional<Loc> FieldLoc =
+  std::optional<Loc> FieldLoc =
       State->getLValue(SuccessField, Instance).getAs<Loc>();
   if (!FieldLoc)
     return UnknownVal();
@@ -272,12 +271,12 @@ ProgramStateRef GTestChecker::assumeValuesEqual(SVal Val1, SVal Val2,
                                                 CheckerContext &C) {
   auto DVal1 = Val1.getAs<DefinedOrUnknownSVal>();
   auto DVal2 = Val2.getAs<DefinedOrUnknownSVal>();
-  if (!DVal1.hasValue() || !DVal2.hasValue())
+  if (!DVal1 || !DVal2)
     return State;
 
   auto ValuesEqual =
       C.getSValBuilder().evalEQ(State, *DVal1, *DVal2).getAs<DefinedSVal>();
-  if (!ValuesEqual.hasValue())
+  if (!ValuesEqual)
     return State;
 
   State = C.getConstraintManager().assume(State, *ValuesEqual, true);

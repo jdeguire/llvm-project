@@ -22,6 +22,7 @@
 #include "llvm/MC/TargetRegistry.h"
 
 #define GET_INSTRINFO_MC_DESC
+#define ENABLE_INSTR_PREDICATE_VERIFIER
 #include "SPIRVGenInstrInfo.inc"
 
 #define GET_SUBTARGETINFO_MC_DESC
@@ -87,7 +88,8 @@ static MCInstrAnalysis *createSPIRVInstrAnalysis(const MCInstrInfo *Info) {
 }
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeSPIRVTargetMC() {
-  for (Target *T : {&getTheSPIRV32Target(), &getTheSPIRV64Target()}) {
+  for (Target *T : {&getTheSPIRV32Target(), &getTheSPIRV64Target(),
+                    &getTheSPIRVLogicalTarget()}) {
     RegisterMCAsmInfo<SPIRVMCAsmInfo> X(*T);
     TargetRegistry::RegisterMCInstrInfo(*T, createSPIRVMCInstrInfo);
     TargetRegistry::RegisterMCRegInfo(*T, createSPIRVMCRegisterInfo);

@@ -37,11 +37,11 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorOr.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/LineIterator.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -204,7 +204,7 @@ public:
 // which don't support these options.
 struct FilterUnusedFlags {
   bool operator() (StringRef S) {
-    return (S == "-no-integrated-as") || S.startswith("-Wa,");
+    return (S == "-no-integrated-as") || S.starts_with("-Wa,");
   }
 };
 

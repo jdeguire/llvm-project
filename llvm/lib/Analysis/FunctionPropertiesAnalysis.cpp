@@ -16,11 +16,35 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/CommandLine.h"
 #include <deque>
 
 using namespace llvm;
+
+namespace llvm {
+cl::opt<bool> EnableDetailedFunctionProperties(
+    "enable-detailed-function-properties", cl::Hidden, cl::init(false),
+    cl::desc("Whether or not to compute detailed function properties."));
+
+cl::opt<unsigned> BigBasicBlockInstructionThreshold(
+    "big-basic-block-instruction-threshold", cl::Hidden, cl::init(500),
+    cl::desc("The minimum number of instructions a basic block should contain "
+             "before being considered big."));
+
+cl::opt<unsigned> MediumBasicBlockInstructionThreshold(
+    "medium-basic-block-instruction-threshold", cl::Hidden, cl::init(15),
+    cl::desc("The minimum number of instructions a basic block should contain "
+             "before being considered medium-sized."));
+}
+
+static cl::opt<unsigned> CallWithManyArgumentsThreshold(
+    "call-with-many-arguments-threshold", cl::Hidden, cl::init(4),
+    cl::desc("The minimum number of arguments a function call must have before "
+             "it is considered having many arguments."));
 
 namespace {
 int64_t getNrBlocksFromCond(const BasicBlock &BB) {
@@ -62,6 +86,118 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
     }
   }
   TotalInstructionCount += Direction * BB.sizeWithoutDebug();
+
+  if (EnableDetailedFunctionProperties) {
+    unsigned SuccessorCount = succ_size(&BB);
+    if (SuccessorCount == 1)
+      BasicBlocksWithSingleSuccessor += Direction;
+    else if (SuccessorCount == 2)
+      BasicBlocksWithTwoSuccessors += Direction;
+    else if (SuccessorCount > 2)
+      BasicBlocksWithMoreThanTwoSuccessors += Direction;
+
+    unsigned PredecessorCount = pred_size(&BB);
+    if (PredecessorCount == 1)
+      BasicBlocksWithSinglePredecessor += Direction;
+    else if (PredecessorCount == 2)
+      BasicBlocksWithTwoPredecessors += Direction;
+    else if (PredecessorCount > 2)
+      BasicBlocksWithMoreThanTwoPredecessors += Direction;
+
+    if (TotalInstructionCount > BigBasicBlockInstructionThreshold)
+      BigBasicBlocks += Direction;
+    else if (TotalInstructionCount > MediumBasicBlockInstructionThreshold)
+      MediumBasicBlocks += Direction;
+    else
+      SmallBasicBlocks += Direction;
+
+    // Calculate critical edges by looking through all successors of a basic
+    // block that has multiple successors and finding ones that have multiple
+    // predecessors, which represent critical edges.
+    if (SuccessorCount > 1) {
+      for (const auto *Successor : successors(&BB)) {
+        if (pred_size(Successor) > 1)
+          CriticalEdgeCount += Direction;
+      }
+    }
+
+    ControlFlowEdgeCount += Direction * SuccessorCount;
+
+    if (const auto *BI = dyn_cast<BranchInst>(BB.getTerminator())) {
+      if (!BI->isConditional())
+        UnconditionalBranchCount += Direction;
+    }
+
+    for (const Instruction &I : BB.instructionsWithoutDebug()) {
+      if (I.isCast())
+        CastInstructionCount += Direction;
+
+      if (I.getType()->isFloatTy())
+        FloatingPointInstructionCount += Direction;
+      else if (I.getType()->isIntegerTy())
+        IntegerInstructionCount += Direction;
+
+      if (isa<IntrinsicInst>(I))
+        ++IntrinsicCount;
+
+      if (const auto *Call = dyn_cast<CallInst>(&I)) {
+        if (Call->isIndirectCall())
+          IndirectCallCount += Direction;
+        else
+          DirectCallCount += Direction;
+
+        if (Call->getType()->isIntegerTy())
+          CallReturnsIntegerCount += Direction;
+        else if (Call->getType()->isFloatingPointTy())
+          CallReturnsFloatCount += Direction;
+        else if (Call->getType()->isPointerTy())
+          CallReturnsPointerCount += Direction;
+        else if (Call->getType()->isVectorTy()) {
+          if (Call->getType()->getScalarType()->isIntegerTy())
+            CallReturnsVectorIntCount += Direction;
+          else if (Call->getType()->getScalarType()->isFloatingPointTy())
+            CallReturnsVectorFloatCount += Direction;
+          else if (Call->getType()->getScalarType()->isPointerTy())
+            CallReturnsVectorPointerCount += Direction;
+        }
+
+        if (Call->arg_size() > CallWithManyArgumentsThreshold)
+          CallWithManyArgumentsCount += Direction;
+
+        for (const auto &Arg : Call->args()) {
+          if (Arg->getType()->isPointerTy()) {
+            CallWithPointerArgumentCount += Direction;
+            break;
+          }
+        }
+      }
+
+#define COUNT_OPERAND(OPTYPE)                                                  \
+  if (isa<OPTYPE>(Operand)) {                                                  \
+    OPTYPE##OperandCount += Direction;                                         \
+    continue;                                                                  \
+  }
+
+      for (unsigned int OperandIndex = 0; OperandIndex < I.getNumOperands();
+           ++OperandIndex) {
+        Value *Operand = I.getOperand(OperandIndex);
+        COUNT_OPERAND(GlobalValue)
+        COUNT_OPERAND(ConstantInt)
+        COUNT_OPERAND(ConstantFP)
+        COUNT_OPERAND(Constant)
+        COUNT_OPERAND(Instruction)
+        COUNT_OPERAND(BasicBlock)
+        COUNT_OPERAND(InlineAsm)
+        COUNT_OPERAND(Argument)
+
+        // We only get to this point if we haven't matched any of the other
+        // operand types.
+        UnknownOperandCount += Direction;
+      }
+
+#undef CHECK_OPERAND
+    }
+  }
 }
 
 void FunctionPropertiesInfo::updateAggregateStats(const Function &F,
@@ -82,13 +218,15 @@ void FunctionPropertiesInfo::updateAggregateStats(const Function &F,
 }
 
 FunctionPropertiesInfo FunctionPropertiesInfo::getFunctionPropertiesInfo(
-    const Function &F, FunctionAnalysisManager &FAM) {
+    Function &F, FunctionAnalysisManager &FAM) {
+  return getFunctionPropertiesInfo(F, FAM.getResult<DominatorTreeAnalysis>(F),
+                                   FAM.getResult<LoopAnalysis>(F));
+}
+
+FunctionPropertiesInfo FunctionPropertiesInfo::getFunctionPropertiesInfo(
+    const Function &F, const DominatorTree &DT, const LoopInfo &LI) {
 
   FunctionPropertiesInfo FPI;
-  // The const casts are due to the getResult API - there's no mutation of F.
-  const auto &LI = FAM.getResult<LoopAnalysis>(const_cast<Function &>(F));
-  const auto &DT =
-      FAM.getResult<DominatorTreeAnalysis>(const_cast<Function &>(F));
   for (const auto &BB : F)
     if (DT.isReachableFromEntry(&BB))
       FPI.reIncludeBB(BB);
@@ -97,17 +235,59 @@ FunctionPropertiesInfo FunctionPropertiesInfo::getFunctionPropertiesInfo(
 }
 
 void FunctionPropertiesInfo::print(raw_ostream &OS) const {
-  OS << "BasicBlockCount: " << BasicBlockCount << "\n"
-     << "BlocksReachedFromConditionalInstruction: "
-     << BlocksReachedFromConditionalInstruction << "\n"
-     << "Uses: " << Uses << "\n"
-     << "DirectCallsToDefinedFunctions: " << DirectCallsToDefinedFunctions
-     << "\n"
-     << "LoadInstCount: " << LoadInstCount << "\n"
-     << "StoreInstCount: " << StoreInstCount << "\n"
-     << "MaxLoopDepth: " << MaxLoopDepth << "\n"
-     << "TopLevelLoopCount: " << TopLevelLoopCount << "\n"
-     << "TotalInstructionCount: " << TotalInstructionCount << "\n\n";
+#define PRINT_PROPERTY(PROP_NAME) OS << #PROP_NAME ": " << PROP_NAME << "\n";
+
+  PRINT_PROPERTY(BasicBlockCount)
+  PRINT_PROPERTY(BlocksReachedFromConditionalInstruction)
+  PRINT_PROPERTY(Uses)
+  PRINT_PROPERTY(DirectCallsToDefinedFunctions)
+  PRINT_PROPERTY(LoadInstCount)
+  PRINT_PROPERTY(StoreInstCount)
+  PRINT_PROPERTY(MaxLoopDepth)
+  PRINT_PROPERTY(TopLevelLoopCount)
+  PRINT_PROPERTY(TotalInstructionCount)
+
+  if (EnableDetailedFunctionProperties) {
+    PRINT_PROPERTY(BasicBlocksWithSingleSuccessor)
+    PRINT_PROPERTY(BasicBlocksWithTwoSuccessors)
+    PRINT_PROPERTY(BasicBlocksWithMoreThanTwoSuccessors)
+    PRINT_PROPERTY(BasicBlocksWithSinglePredecessor)
+    PRINT_PROPERTY(BasicBlocksWithTwoPredecessors)
+    PRINT_PROPERTY(BasicBlocksWithMoreThanTwoPredecessors)
+    PRINT_PROPERTY(BigBasicBlocks)
+    PRINT_PROPERTY(MediumBasicBlocks)
+    PRINT_PROPERTY(SmallBasicBlocks)
+    PRINT_PROPERTY(CastInstructionCount)
+    PRINT_PROPERTY(FloatingPointInstructionCount)
+    PRINT_PROPERTY(IntegerInstructionCount)
+    PRINT_PROPERTY(ConstantIntOperandCount)
+    PRINT_PROPERTY(ConstantFPOperandCount)
+    PRINT_PROPERTY(ConstantOperandCount)
+    PRINT_PROPERTY(InstructionOperandCount)
+    PRINT_PROPERTY(BasicBlockOperandCount)
+    PRINT_PROPERTY(GlobalValueOperandCount)
+    PRINT_PROPERTY(InlineAsmOperandCount)
+    PRINT_PROPERTY(ArgumentOperandCount)
+    PRINT_PROPERTY(UnknownOperandCount)
+    PRINT_PROPERTY(CriticalEdgeCount)
+    PRINT_PROPERTY(ControlFlowEdgeCount)
+    PRINT_PROPERTY(UnconditionalBranchCount)
+    PRINT_PROPERTY(IntrinsicCount)
+    PRINT_PROPERTY(DirectCallCount)
+    PRINT_PROPERTY(IndirectCallCount)
+    PRINT_PROPERTY(CallReturnsIntegerCount)
+    PRINT_PROPERTY(CallReturnsFloatCount)
+    PRINT_PROPERTY(CallReturnsPointerCount)
+    PRINT_PROPERTY(CallReturnsVectorIntCount)
+    PRINT_PROPERTY(CallReturnsVectorFloatCount)
+    PRINT_PROPERTY(CallReturnsVectorPointerCount)
+    PRINT_PROPERTY(CallWithManyArgumentsCount)
+    PRINT_PROPERTY(CallWithPointerArgumentCount)
+  }
+
+#undef PRINT_PROPERTY
+
+  OS << "\n";
 }
 
 AnalysisKey FunctionPropertiesAnalysis::Key;
@@ -127,9 +307,9 @@ FunctionPropertiesPrinterPass::run(Function &F, FunctionAnalysisManager &AM) {
 }
 
 FunctionPropertiesUpdater::FunctionPropertiesUpdater(
-    FunctionPropertiesInfo &FPI, const CallBase &CB)
+    FunctionPropertiesInfo &FPI, CallBase &CB)
     : FPI(FPI), CallSiteBB(*CB.getParent()), Caller(*CallSiteBB.getParent()) {
-
+  assert(isa<CallInst>(CB) || isa<InvokeInst>(CB));
   // For BBs that are likely to change, we subtract from feature totals their
   // contribution. Some features, like max loop counts or depths, are left
   // invalid, as they will be updated post-inlining.
@@ -145,6 +325,18 @@ FunctionPropertiesUpdater::FunctionPropertiesUpdater(
   // We track successors separately, too, because they form a boundary, together
   // with the CB BB ('Entry') between which the inlined callee will be pasted.
   Successors.insert(succ_begin(&CallSiteBB), succ_end(&CallSiteBB));
+
+  // Inlining only handles invoke and calls. If this is an invoke, and inlining
+  // it pulls another invoke, the original landing pad may get split, so as to
+  // share its content with other potential users. So the edge up to which we
+  // need to invalidate and then re-account BB data is the successors of the
+  // current landing pad. We can leave the current lp, too - if it doesn't get
+  // split, then it will be the place traversal stops. Either way, the
+  // discounted BBs will be checked if reachable and re-added.
+  if (const auto *II = dyn_cast<InvokeInst>(&CB)) {
+    const auto *UnwindDest = II->getUnwindDest();
+    Successors.insert(succ_begin(UnwindDest), succ_end(UnwindDest));
+  }
 
   // Exclude the CallSiteBB, if it happens to be its own successor (1-BB loop).
   // We are only interested in BBs the graph moves past the callsite BB to
@@ -165,49 +357,83 @@ FunctionPropertiesUpdater::FunctionPropertiesUpdater(
 }
 
 void FunctionPropertiesUpdater::finish(FunctionAnalysisManager &FAM) const {
-  SetVector<const BasicBlock *> Worklist;
-
-  if (&CallSiteBB != &*Caller.begin()) {
-    FPI.reIncludeBB(*Caller.begin());
-    Worklist.insert(&*Caller.begin());
-  }
-
   // Update feature values from the BBs that were copied from the callee, or
   // might have been modified because of inlining. The latter have been
   // subtracted in the FunctionPropertiesUpdater ctor.
   // There could be successors that were reached before but now are only
   // reachable from elsewhere in the CFG.
-  // Suppose the following diamond CFG (lines are arrows pointing down):
+  // One example is the following diamond CFG (lines are arrows pointing down):
   //    A
   //  /   \
   // B     C
+  // |     |
+  // |     D
+  // |     |
+  // |     E
   //  \   /
-  //    D
+  //    F
   // There's a call site in C that is inlined. Upon doing that, it turns out
   // it expands to
   //   call void @llvm.trap()
   //   unreachable
-  // D isn't reachable from C anymore, but we did discount it when we set up
+  // F isn't reachable from C anymore, but we did discount it when we set up
   // FunctionPropertiesUpdater, so we need to re-include it here.
-
+  // At the same time, D and E were reachable before, but now are not anymore,
+  // so we need to leave D out (we discounted it at setup), and explicitly
+  // remove E.
+  SetVector<const BasicBlock *> Reinclude;
+  SetVector<const BasicBlock *> Unreachable;
   const auto &DT =
       FAM.getResult<DominatorTreeAnalysis>(const_cast<Function &>(Caller));
-  for (const auto *Succ : Successors)
-    if (DT.isReachableFromEntry(Succ) && Worklist.insert(Succ))
-      FPI.reIncludeBB(*Succ);
 
-  auto I = Worklist.size();
-  bool CSInsertion = Worklist.insert(&CallSiteBB);
+  if (&CallSiteBB != &*Caller.begin())
+    Reinclude.insert(&*Caller.begin());
+
+  // Distribute the successors to the 2 buckets.
+  for (const auto *Succ : Successors)
+    if (DT.isReachableFromEntry(Succ))
+      Reinclude.insert(Succ);
+    else
+      Unreachable.insert(Succ);
+
+  // For reinclusion, we want to stop at the reachable successors, who are at
+  // the beginning of the worklist; but, starting from the callsite bb and
+  // ending at those successors, we also want to perform a traversal.
+  // IncludeSuccessorsMark is the index after which we include successors.
+  const auto IncludeSuccessorsMark = Reinclude.size();
+  bool CSInsertion = Reinclude.insert(&CallSiteBB);
   (void)CSInsertion;
   assert(CSInsertion);
-  for (; I < Worklist.size(); ++I) {
-    const auto *BB = Worklist[I];
+  for (size_t I = 0; I < Reinclude.size(); ++I) {
+    const auto *BB = Reinclude[I];
     FPI.reIncludeBB(*BB);
-    for (const auto *Succ : successors(BB))
-      Worklist.insert(Succ);
+    if (I >= IncludeSuccessorsMark)
+      Reinclude.insert(succ_begin(BB), succ_end(BB));
+  }
+
+  // For exclusion, we don't need to exclude the set of BBs that were successors
+  // before and are now unreachable, because we already did that at setup. For
+  // the rest, as long as a successor is unreachable, we want to explicitly
+  // exclude it.
+  const auto AlreadyExcludedMark = Unreachable.size();
+  for (size_t I = 0; I < Unreachable.size(); ++I) {
+    const auto *U = Unreachable[I];
+    if (I >= AlreadyExcludedMark)
+      FPI.updateForBB(*U, -1);
+    for (const auto *Succ : successors(U))
+      if (!DT.isReachableFromEntry(Succ))
+        Unreachable.insert(Succ);
   }
 
   const auto &LI = FAM.getResult<LoopAnalysis>(const_cast<Function &>(Caller));
   FPI.updateAggregateStats(Caller, LI);
-  assert(FPI == FunctionPropertiesInfo::getFunctionPropertiesInfo(Caller, FAM));
+}
+
+bool FunctionPropertiesUpdater::isUpdateValid(Function &F,
+                                              const FunctionPropertiesInfo &FPI,
+                                              FunctionAnalysisManager &FAM) {
+  DominatorTree DT(F);
+  LoopInfo LI(DT);
+  auto Fresh = FunctionPropertiesInfo::getFunctionPropertiesInfo(F, DT, LI);
+  return FPI == Fresh;
 }

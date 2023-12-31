@@ -19,13 +19,15 @@ namespace llvm {
 namespace exegesis {
 
 LatencyBenchmarkRunner::LatencyBenchmarkRunner(
-    const LLVMState &State, InstructionBenchmark::ModeE Mode,
-    InstructionBenchmark::ResultAggregationModeE ResultAgg)
-    : BenchmarkRunner(State, Mode) {
-  assert((Mode == InstructionBenchmark::Latency ||
-          Mode == InstructionBenchmark::InverseThroughput) &&
+    const LLVMState &State, Benchmark::ModeE Mode,
+    BenchmarkPhaseSelectorE BenchmarkPhaseSelector,
+    Benchmark::ResultAggregationModeE ResultAgg, ExecutionModeE ExecutionMode,
+    unsigned BenchmarkRepeatCount)
+    : BenchmarkRunner(State, Mode, BenchmarkPhaseSelector, ExecutionMode) {
+  assert((Mode == Benchmark::Latency || Mode == Benchmark::InverseThroughput) &&
          "invalid mode");
   ResultAggMode = ResultAgg;
+  NumMeasurements = BenchmarkRepeatCount;
 }
 
 LatencyBenchmarkRunner::~LatencyBenchmarkRunner() = default;
@@ -68,7 +70,6 @@ Expected<std::vector<BenchmarkMeasure>> LatencyBenchmarkRunner::runMeasurements(
   // Cycle measurements include some overhead from the kernel. Repeat the
   // measure several times and return the aggregated value, as specified by
   // ResultAggMode.
-  constexpr const int NumMeasurements = 30;
   llvm::SmallVector<int64_t, 4> AccumulatedValues;
   double MinVariance = std::numeric_limits<double>::infinity();
   const char *CounterName = State.getPfmCounters().CycleCounter;
@@ -93,10 +94,10 @@ Expected<std::vector<BenchmarkMeasure>> LatencyBenchmarkRunner::runMeasurements(
 
   std::string ModeName;
   switch (Mode) {
-  case InstructionBenchmark::Latency:
+  case Benchmark::Latency:
     ModeName = "latency";
     break;
-  case InstructionBenchmark::InverseThroughput:
+  case Benchmark::InverseThroughput:
     ModeName = "inverse_throughput";
     break;
   default:
@@ -104,7 +105,7 @@ Expected<std::vector<BenchmarkMeasure>> LatencyBenchmarkRunner::runMeasurements(
   }
 
   switch (ResultAggMode) {
-  case InstructionBenchmark::MinVariance: {
+  case Benchmark::MinVariance: {
     if (ValuesCount == 1)
       llvm::errs() << "Each sample only has one value. result-aggregation-mode "
                       "of min-variance is probably non-sensical\n";
@@ -114,19 +115,19 @@ Expected<std::vector<BenchmarkMeasure>> LatencyBenchmarkRunner::runMeasurements(
       Result.push_back(BenchmarkMeasure::Create(ModeName, Value));
     return std::move(Result);
   }
-  case InstructionBenchmark::Min: {
+  case Benchmark::Min: {
     std::vector<BenchmarkMeasure> Result;
     Result.push_back(
         BenchmarkMeasure::Create(ModeName, findMin(AccumulatedValues)));
     return std::move(Result);
   }
-  case InstructionBenchmark::Max: {
+  case Benchmark::Max: {
     std::vector<BenchmarkMeasure> Result;
     Result.push_back(
         BenchmarkMeasure::Create(ModeName, findMax(AccumulatedValues)));
     return std::move(Result);
   }
-  case InstructionBenchmark::Mean: {
+  case Benchmark::Mean: {
     std::vector<BenchmarkMeasure> Result;
     Result.push_back(
         BenchmarkMeasure::Create(ModeName, findMean(AccumulatedValues)));

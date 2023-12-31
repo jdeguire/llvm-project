@@ -59,7 +59,8 @@ public:
   static void CloseAll(IoErrorHandler &);
   static void FlushAll(IoErrorHandler &);
 
-  void OpenUnit(std::optional<OpenStatus>, std::optional<Action>, Position,
+  // Returns true if an existing unit was closed
+  bool OpenUnit(std::optional<OpenStatus>, std::optional<Action>, Position,
       OwningPtr<char> &&path, std::size_t pathLength, Convert,
       IoErrorHandler &);
   void OpenAnonymousUnit(std::optional<OpenStatus>, std::optional<Action>,
@@ -70,8 +71,15 @@ public:
   Iostat SetDirection(Direction);
 
   template <typename A, typename... X>
-  IoStatementState &BeginIoStatement(X &&...xs) {
-    lock_.Take(); // dropped in EndIoStatement()
+  IoStatementState &BeginIoStatement(const Terminator &terminator, X &&...xs) {
+    // Take lock_ and hold it until EndIoStatement().
+#if USE_PTHREADS
+    if (!lock_.TakeIfNoDeadlock()) {
+      terminator.Crash("Recursive I/O attempted on unit %d", unitNumber_);
+    }
+#else
+    lock_.Take();
+#endif
     A &state{u_.emplace<A>(std::forward<X>(xs)...)};
     if constexpr (!std::is_same_v<A, OpenStatementState>) {
       state.mutableModes() = ConnectionState::modes;
@@ -94,7 +102,8 @@ public:
   void Endfile(IoErrorHandler &);
   void Rewind(IoErrorHandler &);
   void EndIoStatement();
-  void SetPosition(std::int64_t, IoErrorHandler &); // zero-based
+  bool SetStreamPos(std::int64_t, IoErrorHandler &); // one-based, for POS=
+  bool SetDirectRec(std::int64_t, IoErrorHandler &); // one-based, for REC=
   std::int64_t InquirePos() const {
     // 12.6.2.11 defines POS=1 as the beginning of file
     return frameOffsetInFile_ + recordOffsetInFrame_ + positionInRecord + 1;
@@ -108,8 +117,10 @@ public:
   bool Wait(int);
 
 private:
+  static UnitMap &CreateUnitMap();
   static UnitMap &GetUnitMap();
   const char *FrameNextInput(IoErrorHandler &, std::size_t);
+  void SetPosition(std::int64_t, IoErrorHandler &); // zero-based
   void BeginSequentialVariableUnformattedInputRecord(IoErrorHandler &);
   void BeginVariableFormattedInputRecord(IoErrorHandler &);
   void BackspaceFixedRecord(IoErrorHandler &);
@@ -121,6 +132,7 @@ private:
   void CommitWrites();
   bool CheckDirectAccess(IoErrorHandler &);
   void HitEndOnRead(IoErrorHandler &);
+  std::int32_t ReadHeaderOrFooter(std::int64_t frameOffset);
 
   Lock lock_;
 
@@ -128,6 +140,7 @@ private:
   Direction direction_{Direction::Output};
   bool impliedEndfile_{false}; // sequential/stream output has taken place
   bool beganReadingRecord_{false};
+  bool anyWriteSinceLastPositioning_{false};
   bool directAccessRecWasSet_{false}; // REC= appeared
   // Subtle: The beginning of the frame can't be allowed to advance
   // during a single list-directed READ due to the possibility of a
@@ -154,14 +167,14 @@ private:
   // Points to the active alternative (if any) in u_ for use as a Cookie
   std::optional<IoStatementState> io_;
 
-  // A stack of child I/O pseudo-units for user-defined derived type
-  // I/O that have this unit number.
+  // A stack of child I/O pseudo-units for defined I/O that have this
+  // unit number.
   OwningPtr<ChildIo> child_;
 };
 
-// A pseudo-unit for child I/O statements in user-defined derived type
-// I/O subroutines; it forwards operations to the parent I/O statement,
-// which can also be a child I/O statement.
+// A pseudo-unit for child I/O statements in defined I/O subroutines;
+// it forwards operations to the parent I/O statement, which might also
+// be a child I/O statement.
 class ChildIo {
 public:
   ChildIo(IoStatementState &parent, OwningPtr<ChildIo> &&previous)
@@ -192,7 +205,7 @@ private:
       ChildListIoStatementState<Direction::Input>,
       ChildUnformattedIoStatementState<Direction::Output>,
       ChildUnformattedIoStatementState<Direction::Input>, InquireUnitState,
-      ErroneousIoStatementState>
+      ErroneousIoStatementState, ExternalMiscIoStatementState>
       u_;
   std::optional<IoStatementState> io_;
 };

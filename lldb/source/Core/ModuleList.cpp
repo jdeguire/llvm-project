@@ -7,21 +7,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ModuleList.h"
-#include "lldb/Core/FileSpecList.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
+#include "lldb/Core/PluginManager.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Interpreter/OptionValueFileSpec.h"
 #include "lldb/Interpreter/OptionValueFileSpecList.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
 #include "lldb/Interpreter/Property.h"
-#include "lldb/Symbol/LocateSymbolFile.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/TypeList.h"
 #include "lldb/Symbol/VariableList.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/ConstString.h"
+#include "lldb/Utility/FileSpecList.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/UUID.h"
@@ -75,8 +75,7 @@ enum {
 } // namespace
 
 ModuleListProperties::ModuleListProperties() {
-  m_collection_sp =
-      std::make_shared<OptionValueProperties>(ConstString("symbols"));
+  m_collection_sp = std::make_shared<OptionValueProperties>("symbols");
   m_collection_sp->Initialize(g_modulelist_properties);
   m_collection_sp->SetValueChangedCallback(ePropertySymLinkPaths,
                                            [this] { UpdateSymlinkMappings(); });
@@ -97,73 +96,71 @@ ModuleListProperties::ModuleListProperties() {
 
 bool ModuleListProperties::GetEnableExternalLookup() const {
   const uint32_t idx = ePropertyEnableExternalLookup;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value != 0);
+  return GetPropertyAtIndexAs<bool>(
+      idx, g_modulelist_properties[idx].default_uint_value != 0);
 }
 
 bool ModuleListProperties::SetEnableExternalLookup(bool new_value) {
-  return m_collection_sp->SetPropertyAtIndexAsBoolean(
-      nullptr, ePropertyEnableExternalLookup, new_value);
+  return SetPropertyAtIndex(ePropertyEnableExternalLookup, new_value);
+}
+
+bool ModuleListProperties::GetEnableBackgroundLookup() const {
+  const uint32_t idx = ePropertyEnableBackgroundLookup;
+  return GetPropertyAtIndexAs<bool>(
+      idx, g_modulelist_properties[idx].default_uint_value != 0);
 }
 
 FileSpec ModuleListProperties::GetClangModulesCachePath() const {
-  return m_collection_sp
-      ->GetPropertyAtIndexAsOptionValueFileSpec(nullptr, false,
-                                                ePropertyClangModulesCachePath)
-      ->GetCurrentValue();
+  const uint32_t idx = ePropertyClangModulesCachePath;
+  return GetPropertyAtIndexAs<FileSpec>(idx, {});
 }
 
 bool ModuleListProperties::SetClangModulesCachePath(const FileSpec &path) {
-  return m_collection_sp->SetPropertyAtIndexAsFileSpec(
-      nullptr, ePropertyClangModulesCachePath, path);
+  const uint32_t idx = ePropertyClangModulesCachePath;
+  return SetPropertyAtIndex(idx, path);
 }
 
 FileSpec ModuleListProperties::GetLLDBIndexCachePath() const {
-  return m_collection_sp
-      ->GetPropertyAtIndexAsOptionValueFileSpec(nullptr, false,
-                                                ePropertyLLDBIndexCachePath)
-      ->GetCurrentValue();
+  const uint32_t idx = ePropertyLLDBIndexCachePath;
+  return GetPropertyAtIndexAs<FileSpec>(idx, {});
 }
 
 bool ModuleListProperties::SetLLDBIndexCachePath(const FileSpec &path) {
-  return m_collection_sp->SetPropertyAtIndexAsFileSpec(
-      nullptr, ePropertyLLDBIndexCachePath, path);
+  const uint32_t idx = ePropertyLLDBIndexCachePath;
+  return SetPropertyAtIndex(idx, path);
 }
 
 bool ModuleListProperties::GetEnableLLDBIndexCache() const {
   const uint32_t idx = ePropertyEnableLLDBIndexCache;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value != 0);
+  return GetPropertyAtIndexAs<bool>(
+      idx, g_modulelist_properties[idx].default_uint_value != 0);
 }
 
 bool ModuleListProperties::SetEnableLLDBIndexCache(bool new_value) {
-  return m_collection_sp->SetPropertyAtIndexAsBoolean(
-      nullptr, ePropertyEnableLLDBIndexCache, new_value);
+  return SetPropertyAtIndex(ePropertyEnableLLDBIndexCache, new_value);
 }
 
 uint64_t ModuleListProperties::GetLLDBIndexCacheMaxByteSize() {
   const uint32_t idx = ePropertyLLDBIndexCacheMaxByteSize;
-  return m_collection_sp->GetPropertyAtIndexAsUInt64(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value);
+  return GetPropertyAtIndexAs<uint64_t>(
+      idx, g_modulelist_properties[idx].default_uint_value);
 }
 
 uint64_t ModuleListProperties::GetLLDBIndexCacheMaxPercent() {
   const uint32_t idx = ePropertyLLDBIndexCacheMaxPercent;
-  return m_collection_sp->GetPropertyAtIndexAsUInt64(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value);
+  return GetPropertyAtIndexAs<uint64_t>(
+      idx, g_modulelist_properties[idx].default_uint_value);
 }
 
 uint64_t ModuleListProperties::GetLLDBIndexCacheExpirationDays() {
   const uint32_t idx = ePropertyLLDBIndexCacheExpirationDays;
-  return m_collection_sp->GetPropertyAtIndexAsUInt64(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value);
+  return GetPropertyAtIndexAs<uint64_t>(
+      idx, g_modulelist_properties[idx].default_uint_value);
 }
 
 void ModuleListProperties::UpdateSymlinkMappings() {
-  FileSpecList list = m_collection_sp
-                          ->GetPropertyAtIndexAsOptionValueFileSpecList(
-                              nullptr, false, ePropertySymLinkPaths)
-                          ->GetCurrentValue();
+  FileSpecList list =
+      GetPropertyAtIndexAs<FileSpecList>(ePropertySymLinkPaths, {});
   llvm::sys::ScopedWriter lock(m_symlink_paths_mutex);
   const bool notify = false;
   m_symlink_paths.Clear(notify);
@@ -182,8 +179,8 @@ PathMappingList ModuleListProperties::GetSymlinkMappings() const {
 
 bool ModuleListProperties::GetLoadSymbolOnDemand() {
   const uint32_t idx = ePropertyLoadSymbolOnDemand;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_modulelist_properties[idx].default_uint_value != 0);
+  return GetPropertyAtIndexAs<bool>(
+      idx, g_modulelist_properties[idx].default_uint_value != 0);
 }
 
 ModuleList::ModuleList() : m_modules(), m_modules_mutex() {}
@@ -350,7 +347,7 @@ size_t ModuleList::RemoveOrphans(bool mandatory) {
   }
   size_t remove_count = 0;
   // Modules might hold shared pointers to other modules, so removing one
-  // module might make other other modules orphans. Keep removing modules until
+  // module might make other modules orphans. Keep removing modules until
   // there are no further modules that can be removed.
   bool made_progress = true;
   while (made_progress) {
@@ -425,9 +422,8 @@ void ModuleList::FindFunctions(ConstString name,
 
     std::lock_guard<std::recursive_mutex> guard(m_modules_mutex);
     for (const ModuleSP &module_sp : m_modules) {
-      module_sp->FindFunctions(lookup_info.GetLookupName(),
-                               CompilerDeclContext(),
-                               lookup_info.GetNameTypeMask(), options, sc_list);
+      module_sp->FindFunctions(lookup_info, CompilerDeclContext(), options,
+                               sc_list);
     }
 
     const size_t new_size = sc_list.GetSize();
@@ -561,35 +557,20 @@ ModuleSP ModuleList::FindModule(const UUID &uuid) const {
   return module_sp;
 }
 
-void ModuleList::FindTypes(Module *search_first, ConstString name,
-                           bool name_is_fully_qualified, size_t max_matches,
-                           llvm::DenseSet<SymbolFile *> &searched_symbol_files,
-                           TypeList &types) const {
+void ModuleList::FindTypes(Module *search_first, const TypeQuery &query,
+                           TypeResults &results) const {
   std::lock_guard<std::recursive_mutex> guard(m_modules_mutex);
-
-  collection::const_iterator pos, end = m_modules.end();
   if (search_first) {
-    for (pos = m_modules.begin(); pos != end; ++pos) {
-      if (search_first == pos->get()) {
-        search_first->FindTypes(name, name_is_fully_qualified, max_matches,
-                                searched_symbol_files, types);
-
-        if (types.GetSize() >= max_matches)
-          return;
-      }
-    }
-  }
-
-  for (pos = m_modules.begin(); pos != end; ++pos) {
-    // Search the module if the module is not equal to the one in the symbol
-    // context "sc". If "sc" contains a empty module shared pointer, then the
-    // comparison will always be true (valid_module_ptr != nullptr).
-    if (search_first != pos->get())
-      (*pos)->FindTypes(name, name_is_fully_qualified, max_matches,
-                        searched_symbol_files, types);
-
-    if (types.GetSize() >= max_matches)
+    search_first->FindTypes(query, results);
+    if (results.Done(query))
       return;
+  }
+  for (const auto &module_sp : m_modules) {
+    if (search_first != module_sp.get()) {
+      module_sp->FindTypes(query, results);
+      if (results.Done(query))
+        return;
+    }
   }
 }
 
@@ -769,6 +750,10 @@ void ModuleList::FindSharedModules(const ModuleSpec &module_spec,
   GetSharedModuleList().FindModules(module_spec, matching_module_list);
 }
 
+lldb::ModuleSP ModuleList::FindSharedModule(const UUID &uuid) {
+  return GetSharedModuleList().FindModule(uuid);
+}
+
 size_t ModuleList::RemoveOrphanSharedModules(bool mandatory) {
   return GetSharedModuleList().RemoveOrphans(mandatory);
 }
@@ -906,7 +891,7 @@ ModuleList::GetSharedModule(const ModuleSpec &module_spec, ModuleSP &module_sp,
   // Fixup the incoming path in case the path points to a valid file, yet the
   // arch or UUID (if one was passed in) don't match.
   ModuleSpec located_binary_modulespec =
-      Symbols::LocateExecutableObjectFile(module_spec);
+      PluginManager::LocateExecutableObjectFile(module_spec);
 
   // Don't look for the file if it appears to be the same one we already
   // checked for above...
@@ -1027,7 +1012,7 @@ bool ModuleList::RemoveSharedModuleIfOrphaned(const Module *module_ptr) {
 
 bool ModuleList::LoadScriptingResourcesInTarget(Target *target,
                                                 std::list<Status> &errors,
-                                                Stream *feedback_stream,
+                                                Stream &feedback_stream,
                                                 bool continue_on_error) {
   if (!target)
     return false;
@@ -1058,9 +1043,31 @@ bool ModuleList::LoadScriptingResourcesInTarget(Target *target,
 void ModuleList::ForEach(
     std::function<bool(const ModuleSP &module_sp)> const &callback) const {
   std::lock_guard<std::recursive_mutex> guard(m_modules_mutex);
-  for (const auto &module : m_modules) {
+  for (const auto &module_sp : m_modules) {
+    assert(module_sp != nullptr);
     // If the callback returns false, then stop iterating and break out
-    if (!callback(module))
+    if (!callback(module_sp))
       break;
   }
+}
+
+bool ModuleList::AnyOf(
+    std::function<bool(lldb_private::Module &module_sp)> const &callback)
+    const {
+  std::lock_guard<std::recursive_mutex> guard(m_modules_mutex);
+  for (const auto &module_sp : m_modules) {
+    assert(module_sp != nullptr);
+    if (callback(*module_sp))
+      return true;
+  }
+
+  return false;
+}
+
+
+void ModuleList::Swap(ModuleList &other) {
+  // scoped_lock locks both mutexes at once.
+  std::scoped_lock<std::recursive_mutex, std::recursive_mutex> lock(
+      m_modules_mutex, other.m_modules_mutex);
+  m_modules.swap(other.m_modules);
 }

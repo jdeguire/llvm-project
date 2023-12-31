@@ -8,68 +8,20 @@
 
 #include "UncheckedOptionalAccessCheck.h"
 #include "clang/AST/ASTContext.h"
-#include "clang/AST/DeclCXX.h"
-#include "clang/AST/DeclTemplate.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Analysis/CFG.h"
-#include "clang/Analysis/FlowSensitive/ControlFlowContext.h"
-#include "clang/Analysis/FlowSensitive/DataflowAnalysisContext.h"
-#include "clang/Analysis/FlowSensitive/DataflowEnvironment.h"
-#include "clang/Analysis/FlowSensitive/DataflowLattice.h"
+#include "clang/Analysis/FlowSensitive/DataflowAnalysis.h"
 #include "clang/Analysis/FlowSensitive/Models/UncheckedOptionalAccessModel.h"
-#include "clang/Analysis/FlowSensitive/SourceLocationsLattice.h"
-#include "clang/Analysis/FlowSensitive/WatchedLiteralsSolver.h"
 #include "clang/Basic/SourceLocation.h"
-#include "llvm/ADT/Any.h"
-#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Error.h"
-#include <memory>
-#include <vector>
 
-namespace clang {
-namespace tidy {
-namespace bugprone {
+namespace clang::tidy::bugprone {
 using ast_matchers::MatchFinder;
-using dataflow::SourceLocationsLattice;
+using dataflow::UncheckedOptionalAccessDiagnoser;
 using dataflow::UncheckedOptionalAccessModel;
-using llvm::Optional;
 
 static constexpr llvm::StringLiteral FuncID("fun");
-
-static Optional<SourceLocationsLattice>
-analyzeFunction(const FunctionDecl &FuncDecl, ASTContext &ASTCtx) {
-  using dataflow::ControlFlowContext;
-  using dataflow::DataflowAnalysisState;
-  using llvm::Expected;
-
-  Expected<ControlFlowContext> Context =
-      ControlFlowContext::build(&FuncDecl, FuncDecl.getBody(), &ASTCtx);
-  if (!Context)
-    return llvm::None;
-
-  dataflow::DataflowAnalysisContext AnalysisContext(
-      std::make_unique<dataflow::WatchedLiteralsSolver>());
-  dataflow::Environment Env(AnalysisContext, FuncDecl);
-  UncheckedOptionalAccessModel Analysis(ASTCtx);
-  Expected<std::vector<Optional<DataflowAnalysisState<SourceLocationsLattice>>>>
-      BlockToOutputState =
-          dataflow::runDataflowAnalysis(*Context, Analysis, Env);
-  if (!BlockToOutputState)
-    return llvm::None;
-  assert(Context->getCFG().getExit().getBlockID() < BlockToOutputState->size());
-
-  const Optional<DataflowAnalysisState<SourceLocationsLattice>>
-      &ExitBlockState =
-          (*BlockToOutputState)[Context->getCFG().getExit().getBlockID()];
-  // `runDataflowAnalysis` doesn't guarantee that the exit block is visited;
-  // for example, when it is unreachable.
-  // FIXME: Diagnose violations even when the exit block is unreachable.
-  if (!ExitBlockState)
-    return llvm::None;
-
-  return std::move(ExitBlockState->Lattice);
-}
 
 void UncheckedOptionalAccessCheck::registerMatchers(MatchFinder *Finder) {
   using namespace ast_matchers;
@@ -97,12 +49,17 @@ void UncheckedOptionalAccessCheck::check(
   if (FuncDecl->isTemplated())
     return;
 
-  if (Optional<SourceLocationsLattice> Errors =
-          analyzeFunction(*FuncDecl, *Result.Context))
-    for (const SourceLocation &Loc : Errors->getSourceLocations())
+  UncheckedOptionalAccessDiagnoser Diagnoser(ModelOptions);
+  // FIXME: Allow user to set the (defaulted) SAT iterations max for
+  // `diagnoseFunction` with config options.
+  if (llvm::Expected<llvm::SmallVector<SourceLocation>> Locs =
+          dataflow::diagnoseFunction<UncheckedOptionalAccessModel,
+                                     SourceLocation>(*FuncDecl, *Result.Context,
+                                                     Diagnoser))
+    for (const SourceLocation &Loc : *Locs)
       diag(Loc, "unchecked access to optional value");
+  else
+    llvm::consumeError(Locs.takeError());
 }
 
-} // namespace bugprone
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::bugprone

@@ -153,10 +153,16 @@ inline class_match<ConstantFP> m_ConstantFP() {
   return class_match<ConstantFP>();
 }
 
-/// Match an arbitrary ConstantExpr and ignore it.
-inline class_match<ConstantExpr> m_ConstantExpr() {
-  return class_match<ConstantExpr>();
-}
+struct constantexpr_match {
+  template <typename ITy> bool match(ITy *V) {
+    auto *C = dyn_cast<Constant>(V);
+    return C && (isa<ConstantExpr>(C) || C->containsConstantExpression());
+  }
+};
+
+/// Match a constant expression or a constant that contains a constant
+/// expression.
+inline constantexpr_match m_ConstantExpr() { return constantexpr_match(); }
 
 /// Match an arbitrary basic block value and ignore it.
 inline class_match<BasicBlock> m_BasicBlock() {
@@ -437,6 +443,14 @@ struct is_any_apint {
 /// For vectors, this includes constants with undefined elements.
 inline cst_pred_ty<is_any_apint> m_AnyIntegralConstant() {
   return cst_pred_ty<is_any_apint>();
+}
+
+struct is_shifted_mask {
+  bool isValue(const APInt &C) { return C.isShiftedMask(); }
+};
+
+inline cst_pred_ty<is_shifted_mask> m_ShiftedMask() {
+  return cst_pred_ty<is_shifted_mask>();
 }
 
 struct is_all_ones {
@@ -741,14 +755,14 @@ inline bind_ty<const BasicBlock> m_BasicBlock(const BasicBlock *&V) {
 
 /// Match an arbitrary immediate Constant and ignore it.
 inline match_combine_and<class_match<Constant>,
-                         match_unless<class_match<ConstantExpr>>>
+                         match_unless<constantexpr_match>>
 m_ImmConstant() {
   return m_CombineAnd(m_Constant(), m_Unless(m_ConstantExpr()));
 }
 
 /// Match an immediate Constant, capturing the value if we match.
 inline match_combine_and<bind_ty<Constant>,
-                         match_unless<class_match<ConstantExpr>>>
+                         match_unless<constantexpr_match>>
 m_ImmConstant(Constant *&C) {
   return m_CombineAnd(m_Constant(C), m_Unless(m_ConstantExpr()));
 }
@@ -958,11 +972,6 @@ struct BinaryOp_match {
              (Commutable && L.match(I->getOperand(1)) &&
               R.match(I->getOperand(0)));
     }
-    if (auto *CE = dyn_cast<ConstantExpr>(V))
-      return CE->getOpcode() == Opc &&
-             ((L.match(CE->getOperand(0)) && R.match(CE->getOperand(1))) ||
-              (Commutable && L.match(CE->getOperand(1)) &&
-               R.match(CE->getOperand(0))));
     return false;
   }
 
@@ -1230,6 +1239,45 @@ inline SpecificBinaryOp_match<LHS, RHS> m_BinOp(unsigned Opcode, const LHS &L,
   return SpecificBinaryOp_match<LHS, RHS>(Opcode, L, R);
 }
 
+template <typename LHS, typename RHS, bool Commutable = false>
+struct DisjointOr_match {
+  LHS L;
+  RHS R;
+
+  DisjointOr_match(const LHS &L, const RHS &R) : L(L), R(R) {}
+
+  template <typename OpTy> bool match(OpTy *V) {
+    if (auto *PDI = dyn_cast<PossiblyDisjointInst>(V)) {
+      assert(PDI->getOpcode() == Instruction::Or && "Only or can be disjoint");
+      if (!PDI->isDisjoint())
+        return false;
+      return (L.match(PDI->getOperand(0)) && R.match(PDI->getOperand(1))) ||
+             (Commutable && L.match(PDI->getOperand(1)) &&
+              R.match(PDI->getOperand(0)));
+    }
+    return false;
+  }
+};
+
+template <typename LHS, typename RHS>
+inline DisjointOr_match<LHS, RHS> m_DisjointOr(const LHS &L, const RHS &R) {
+  return DisjointOr_match<LHS, RHS>(L, R);
+}
+
+template <typename LHS, typename RHS>
+inline DisjointOr_match<LHS, RHS, true> m_c_DisjointOr(const LHS &L,
+                                                       const RHS &R) {
+  return DisjointOr_match<LHS, RHS, true>(L, R);
+}
+
+/// Match either "and" or "or disjoint".
+template <typename LHS, typename RHS>
+inline match_combine_or<BinaryOp_match<LHS, RHS, Instruction::Add>,
+                        DisjointOr_match<LHS, RHS>>
+m_AddLike(const LHS &L, const RHS &R) {
+  return m_CombineOr(m_Add(L, R), m_DisjointOr(L, R));
+}
+
 //===----------------------------------------------------------------------===//
 // Class that matches a group of binary opcodes.
 //
@@ -1244,9 +1292,6 @@ struct BinOpPred_match : Predicate {
     if (auto *I = dyn_cast<Instruction>(V))
       return this->isOpType(I->getOpcode()) && L.match(I->getOperand(0)) &&
              R.match(I->getOperand(1));
-    if (auto *CE = dyn_cast<ConstantExpr>(V))
-      return this->isOpType(CE->getOpcode()) && L.match(CE->getOperand(0)) &&
-             R.match(CE->getOperand(1));
     return false;
   }
 };
@@ -1530,7 +1575,7 @@ struct m_SplatOrUndefMask {
   int &SplatIndex;
   m_SplatOrUndefMask(int &SplatIndex) : SplatIndex(SplatIndex) {}
   bool match(ArrayRef<int> Mask) {
-    auto First = find_if(Mask, [](int Elem) { return Elem != -1; });
+    const auto *First = find_if(Mask, [](int Elem) { return Elem != -1; });
     if (First == Mask.end())
       return false;
     SplatIndex = *First;
@@ -1570,10 +1615,10 @@ m_Store(const ValueOpTy &ValueOp, const PointerOpTy &PointerOp) {
 // Matchers for CastInst classes
 //
 
-template <typename Op_t, unsigned Opcode> struct CastClass_match {
+template <typename Op_t, unsigned Opcode> struct CastOperator_match {
   Op_t Op;
 
-  CastClass_match(const Op_t &OpMatch) : Op(OpMatch) {}
+  CastOperator_match(const Op_t &OpMatch) : Op(OpMatch) {}
 
   template <typename OpTy> bool match(OpTy *V) {
     if (auto *O = dyn_cast<Operator>(V))
@@ -1582,104 +1627,169 @@ template <typename Op_t, unsigned Opcode> struct CastClass_match {
   }
 };
 
+template <typename Op_t, unsigned Opcode> struct CastInst_match {
+  Op_t Op;
+
+  CastInst_match(const Op_t &OpMatch) : Op(OpMatch) {}
+
+  template <typename OpTy> bool match(OpTy *V) {
+    if (auto *I = dyn_cast<Instruction>(V))
+      return I->getOpcode() == Opcode && Op.match(I->getOperand(0));
+    return false;
+  }
+};
+
+template <typename Op_t> struct PtrToIntSameSize_match {
+  const DataLayout &DL;
+  Op_t Op;
+
+  PtrToIntSameSize_match(const DataLayout &DL, const Op_t &OpMatch)
+      : DL(DL), Op(OpMatch) {}
+
+  template <typename OpTy> bool match(OpTy *V) {
+    if (auto *O = dyn_cast<Operator>(V))
+      return O->getOpcode() == Instruction::PtrToInt &&
+             DL.getTypeSizeInBits(O->getType()) ==
+                 DL.getTypeSizeInBits(O->getOperand(0)->getType()) &&
+             Op.match(O->getOperand(0));
+    return false;
+  }
+};
+
+template <typename Op_t> struct NNegZExt_match {
+  Op_t Op;
+
+  NNegZExt_match(const Op_t &OpMatch) : Op(OpMatch) {}
+
+  template <typename OpTy> bool match(OpTy *V) {
+    if (auto *I = dyn_cast<Instruction>(V))
+      return I->getOpcode() == Instruction::ZExt && I->hasNonNeg() &&
+             Op.match(I->getOperand(0));
+    return false;
+  }
+};
+
 /// Matches BitCast.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::BitCast> m_BitCast(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::BitCast>(Op);
+inline CastOperator_match<OpTy, Instruction::BitCast>
+m_BitCast(const OpTy &Op) {
+  return CastOperator_match<OpTy, Instruction::BitCast>(Op);
 }
 
 /// Matches PtrToInt.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::PtrToInt> m_PtrToInt(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::PtrToInt>(Op);
+inline CastOperator_match<OpTy, Instruction::PtrToInt>
+m_PtrToInt(const OpTy &Op) {
+  return CastOperator_match<OpTy, Instruction::PtrToInt>(Op);
+}
+
+template <typename OpTy>
+inline PtrToIntSameSize_match<OpTy> m_PtrToIntSameSize(const DataLayout &DL,
+                                                       const OpTy &Op) {
+  return PtrToIntSameSize_match<OpTy>(DL, Op);
 }
 
 /// Matches IntToPtr.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::IntToPtr> m_IntToPtr(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::IntToPtr>(Op);
+inline CastOperator_match<OpTy, Instruction::IntToPtr>
+m_IntToPtr(const OpTy &Op) {
+  return CastOperator_match<OpTy, Instruction::IntToPtr>(Op);
 }
 
 /// Matches Trunc.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::Trunc> m_Trunc(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::Trunc>(Op);
+inline CastOperator_match<OpTy, Instruction::Trunc> m_Trunc(const OpTy &Op) {
+  return CastOperator_match<OpTy, Instruction::Trunc>(Op);
 }
 
 template <typename OpTy>
-inline match_combine_or<CastClass_match<OpTy, Instruction::Trunc>, OpTy>
+inline match_combine_or<CastOperator_match<OpTy, Instruction::Trunc>, OpTy>
 m_TruncOrSelf(const OpTy &Op) {
   return m_CombineOr(m_Trunc(Op), Op);
 }
 
 /// Matches SExt.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::SExt> m_SExt(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::SExt>(Op);
+inline CastInst_match<OpTy, Instruction::SExt> m_SExt(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::SExt>(Op);
 }
 
 /// Matches ZExt.
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::ZExt> m_ZExt(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::ZExt>(Op);
+inline CastInst_match<OpTy, Instruction::ZExt> m_ZExt(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::ZExt>(Op);
 }
 
 template <typename OpTy>
-inline match_combine_or<CastClass_match<OpTy, Instruction::ZExt>, OpTy>
+inline NNegZExt_match<OpTy> m_NNegZExt(const OpTy &Op) {
+  return NNegZExt_match<OpTy>(Op);
+}
+
+template <typename OpTy>
+inline match_combine_or<CastInst_match<OpTy, Instruction::ZExt>, OpTy>
 m_ZExtOrSelf(const OpTy &Op) {
   return m_CombineOr(m_ZExt(Op), Op);
 }
 
 template <typename OpTy>
-inline match_combine_or<CastClass_match<OpTy, Instruction::SExt>, OpTy>
+inline match_combine_or<CastInst_match<OpTy, Instruction::SExt>, OpTy>
 m_SExtOrSelf(const OpTy &Op) {
   return m_CombineOr(m_SExt(Op), Op);
 }
 
+/// Match either "sext" or "zext nneg".
 template <typename OpTy>
-inline match_combine_or<CastClass_match<OpTy, Instruction::ZExt>,
-                        CastClass_match<OpTy, Instruction::SExt>>
+inline match_combine_or<CastInst_match<OpTy, Instruction::SExt>,
+                        NNegZExt_match<OpTy>>
+m_SExtLike(const OpTy &Op) {
+  return m_CombineOr(m_SExt(Op), m_NNegZExt(Op));
+}
+
+template <typename OpTy>
+inline match_combine_or<CastInst_match<OpTy, Instruction::ZExt>,
+                        CastInst_match<OpTy, Instruction::SExt>>
 m_ZExtOrSExt(const OpTy &Op) {
   return m_CombineOr(m_ZExt(Op), m_SExt(Op));
 }
 
 template <typename OpTy>
 inline match_combine_or<
-    match_combine_or<CastClass_match<OpTy, Instruction::ZExt>,
-                     CastClass_match<OpTy, Instruction::SExt>>,
+    match_combine_or<CastInst_match<OpTy, Instruction::ZExt>,
+                     CastInst_match<OpTy, Instruction::SExt>>,
     OpTy>
 m_ZExtOrSExtOrSelf(const OpTy &Op) {
   return m_CombineOr(m_ZExtOrSExt(Op), Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::UIToFP> m_UIToFP(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::UIToFP>(Op);
+inline CastInst_match<OpTy, Instruction::UIToFP> m_UIToFP(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::UIToFP>(Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::SIToFP> m_SIToFP(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::SIToFP>(Op);
+inline CastInst_match<OpTy, Instruction::SIToFP> m_SIToFP(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::SIToFP>(Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::FPToUI> m_FPToUI(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::FPToUI>(Op);
+inline CastInst_match<OpTy, Instruction::FPToUI> m_FPToUI(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::FPToUI>(Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::FPToSI> m_FPToSI(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::FPToSI>(Op);
+inline CastInst_match<OpTy, Instruction::FPToSI> m_FPToSI(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::FPToSI>(Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::FPTrunc> m_FPTrunc(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::FPTrunc>(Op);
+inline CastInst_match<OpTy, Instruction::FPTrunc>
+m_FPTrunc(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::FPTrunc>(Op);
 }
 
 template <typename OpTy>
-inline CastClass_match<OpTy, Instruction::FPExt> m_FPExt(const OpTy &Op) {
-  return CastClass_match<OpTy, Instruction::FPExt>(Op);
+inline CastInst_match<OpTy, Instruction::FPExt> m_FPExt(const OpTy &Op) {
+  return CastInst_match<OpTy, Instruction::FPExt>(Op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2200,6 +2310,17 @@ inline typename m_Intrinsic_Ty<Opnd0>::Ty m_Sqrt(const Opnd0 &Op0) {
   return m_Intrinsic<Intrinsic::sqrt>(Op0);
 }
 
+template <typename Opnd0, typename Opnd1>
+inline typename m_Intrinsic_Ty<Opnd0, Opnd1>::Ty m_CopySign(const Opnd0 &Op0,
+                                                            const Opnd1 &Op1) {
+  return m_Intrinsic<Intrinsic::copysign>(Op0, Op1);
+}
+
+template <typename Opnd0>
+inline typename m_Intrinsic_Ty<Opnd0>::Ty m_VecReverse(const Opnd0 &Op0) {
+  return m_Intrinsic<Intrinsic::experimental_vector_reverse>(Op0);
+}
+
 //===----------------------------------------------------------------------===//
 // Matchers for two-operands operators with the operators in either order
 //
@@ -2278,10 +2399,12 @@ m_NSWNeg(const ValTy &V) {
 }
 
 /// Matches a 'Not' as 'xor V, -1' or 'xor -1, V'.
+/// NOTE: we first match the 'Not' (by matching '-1'),
+/// and only then match the inner matcher!
 template <typename ValTy>
-inline BinaryOp_match<ValTy, cst_pred_ty<is_all_ones>, Instruction::Xor, true>
+inline BinaryOp_match<cst_pred_ty<is_all_ones>, ValTy, Instruction::Xor, true>
 m_Not(const ValTy &V) {
-  return m_c_Xor(V, m_AllOnes());
+  return m_c_Xor(m_AllOnes(), V);
 }
 
 template <typename ValTy> struct NotForbidUndef_match {
@@ -2343,6 +2466,14 @@ inline match_combine_or<
 m_c_MaxOrMin(const LHS &L, const RHS &R) {
   return m_CombineOr(m_CombineOr(m_c_SMax(L, R), m_c_SMin(L, R)),
                      m_CombineOr(m_c_UMax(L, R), m_c_UMin(L, R)));
+}
+
+template <Intrinsic::ID IntrID, typename T0, typename T1>
+inline match_combine_or<typename m_Intrinsic_Ty<T0, T1>::Ty,
+                        typename m_Intrinsic_Ty<T1, T0>::Ty>
+m_c_Intrinsic(const T0 &Op0, const T1 &Op1) {
+  return m_CombineOr(m_Intrinsic<IntrID>(Op0, Op1),
+                     m_Intrinsic<IntrID>(Op1, Op0));
 }
 
 /// Matches FAdd with LHS and RHS in either order.
@@ -2457,9 +2588,6 @@ inline InsertValue_match<Ind, Val_t, Elt_t> m_InsertValue(const Val_t &Val,
 ///  `ptrtoint(gep <vscale x 1 x i8>, <vscale x 1 x i8>* null, i32 1>`
 /// under the right conditions determined by DataLayout.
 struct VScaleVal_match {
-  const DataLayout &DL;
-  VScaleVal_match(const DataLayout &DL) : DL(DL) {}
-
   template <typename ITy> bool match(ITy *V) {
     if (m_Intrinsic<Intrinsic::vscale>().match(V))
       return true;
@@ -2467,11 +2595,12 @@ struct VScaleVal_match {
     Value *Ptr;
     if (m_PtrToInt(m_Value(Ptr)).match(V)) {
       if (auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
-        auto *DerefTy = GEP->getSourceElementType();
-        if (GEP->getNumIndices() == 1 && isa<ScalableVectorType>(DerefTy) &&
+        auto *DerefTy =
+            dyn_cast<ScalableVectorType>(GEP->getSourceElementType());
+        if (GEP->getNumIndices() == 1 && DerefTy &&
+            DerefTy->getElementType()->isIntegerTy(8) &&
             m_Zero().match(GEP->getPointerOperand()) &&
-            m_SpecificInt(1).match(GEP->idx_begin()->get()) &&
-            DL.getTypeAllocSizeInBits(DerefTy).getKnownMinSize() == 8)
+            m_SpecificInt(1).match(GEP->idx_begin()->get()))
           return true;
       }
     }
@@ -2480,8 +2609,8 @@ struct VScaleVal_match {
   }
 };
 
-inline VScaleVal_match m_VScale(const DataLayout &DL) {
-  return VScaleVal_match(DL);
+inline VScaleVal_match m_VScale() {
+  return VScaleVal_match();
 }
 
 template <typename LHS, typename RHS, unsigned Opcode, bool Commutable = false>
@@ -2507,6 +2636,12 @@ struct LogicalOp_match {
       auto *Cond = Select->getCondition();
       auto *TVal = Select->getTrueValue();
       auto *FVal = Select->getFalseValue();
+
+      // Don't match a scalar select of bool vectors.
+      // Transforms expect a single type for operands if this matches.
+      if (Cond->getType() != Select->getType())
+        return false;
+
       if (Opcode == Instruction::And) {
         auto *C = dyn_cast<Constant>(FVal);
         if (C && C->isNullValue())
@@ -2559,6 +2694,25 @@ template <typename LHS, typename RHS>
 inline LogicalOp_match<LHS, RHS, Instruction::Or, true>
 m_c_LogicalOr(const LHS &L, const RHS &R) {
   return LogicalOp_match<LHS, RHS, Instruction::Or, true>(L, R);
+}
+
+/// Matches either L && R or L || R,
+/// either one being in the either binary or logical form.
+/// Note that the latter form is poison-blocking.
+template <typename LHS, typename RHS, bool Commutable = false>
+inline auto m_LogicalOp(const LHS &L, const RHS &R) {
+  return m_CombineOr(
+      LogicalOp_match<LHS, RHS, Instruction::And, Commutable>(L, R),
+      LogicalOp_match<LHS, RHS, Instruction::Or, Commutable>(L, R));
+}
+
+/// Matches either L && R or L || R where L and R are arbitrary values.
+inline auto m_LogicalOp() { return m_LogicalOp(m_Value(), m_Value()); }
+
+/// Matches either L && R or L || R with LHS and RHS in either order.
+template <typename LHS, typename RHS>
+inline auto m_c_LogicalOp(const LHS &L, const RHS &R) {
+  return m_LogicalOp<LHS, RHS, /*Commutable=*/true>(L, R);
 }
 
 } // end namespace PatternMatch

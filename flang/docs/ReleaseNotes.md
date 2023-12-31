@@ -1,15 +1,15 @@
-# Flang 15.0.0 (In-Progress) Release Notes
+# Flang |version| (In-Progress) Release Notes
 
 > **warning**
 >
-> These are in-progress notes for the upcoming LLVM 15.0.0 release.
+> These are in-progress notes for the upcoming LLVM |version| release.
 > Release notes for previous releases can be found on [the Download
 > Page](https://releases.llvm.org/download.html).
 
 ## Introduction
 
 This document contains the release notes for the Flang Fortran frontend,
-part of the LLVM Compiler Infrastructure, release 15.0.0. Here we
+part of the LLVM Compiler Infrastructure, release |version|. Here we
 describe the status of Flang in some detail, including major
 improvements from the previous release and new feature work. For the
 general LLVM release notes, see [the LLVM
@@ -27,7 +27,6 @@ page](https://llvm.org/releases/).
 ## Bug Fixes
 
 ## Non-comprehensive list of changes in this release
-* The bash wrapper script, `flang`, is renamed as `flang-to-external-fc`.
 
 ## New Compiler Flags
 
@@ -46,5 +45,5 @@ Flang's documentation is located in the `flang/docs/` directory in the
 LLVM monorepo.
 
 If you have any questions or comments about Flang, please feel free to
-contact us via the [mailing
-list](https://lists.llvm.org/mailman/listinfo/flang-dev).
+contact us on the [Discourse
+forums](https://discourse.llvm.org/c/subprojects/flang/33).

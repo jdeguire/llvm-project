@@ -129,8 +129,7 @@ llvm::SplitKnownCriticalEdge(Instruction *TI, unsigned SuccNum,
   SmallVector<BasicBlock *, 4> LoopPreds;
   // Check if extra modifications will be required to preserve loop-simplify
   // form after splitting. If it would require splitting blocks with IndirectBr
-  // or CallBr terminators, bail out if preserving loop-simplify form is
-  // requested.
+  // terminators, bail out if preserving loop-simplify form is requested.
   if (LI) {
     if (Loop *TIL = LI->getLoopFor(TIBB)) {
 
@@ -156,10 +155,7 @@ llvm::SplitKnownCriticalEdge(Instruction *TI, unsigned SuccNum,
       // Loop-simplify form can be preserved, if we can split all in-loop
       // predecessors.
       if (any_of(LoopPreds, [](BasicBlock *Pred) {
-            const Instruction *T = Pred->getTerminator();
-            if (const auto *CBR = dyn_cast<CallBrInst>(T))
-              return CBR->getDefaultDest() != Pred;
-            return isa<IndirectBrInst>(T);
+            return isa<IndirectBrInst>(Pred->getTerminator());
           })) {
         if (Options.PreserveLoopSimplify)
           return nullptr;
@@ -183,7 +179,7 @@ llvm::SplitKnownCriticalEdge(Instruction *TI, unsigned SuccNum,
   // Insert the block into the function... right after the block TI lives in.
   Function &F = *TIBB->getParent();
   Function::iterator FBBI = TIBB->getIterator();
-  F.getBasicBlockList().insert(++FBBI, NewBB);
+  F.insert(++FBBI, NewBB);
 
   // Branch to the new block, breaking the edge.
   TI->setSuccessor(SuccNum, NewBB);
@@ -391,7 +387,7 @@ bool llvm::SplitIndirectBrCriticalEdges(Function &F,
     if (ShouldUpdateAnalysis) {
       // Copy the BFI/BPI from Target to BodyBlock.
       BPI->setEdgeProbability(BodyBlock, EdgeProbabilities);
-      BFI->setBlockFreq(BodyBlock, BFI->getBlockFreq(Target).getFrequency());
+      BFI->setBlockFreq(BodyBlock, BFI->getBlockFreq(Target));
     }
     // It's possible Target was its own successor through an indirectbr.
     // In this case, the indirectbr now comes from BodyBlock.
@@ -415,10 +411,10 @@ bool llvm::SplitIndirectBrCriticalEdges(Function &F,
             BPI->getEdgeProbability(Src, DirectSucc);
     }
     if (ShouldUpdateAnalysis) {
-      BFI->setBlockFreq(DirectSucc, BlockFreqForDirectSucc.getFrequency());
+      BFI->setBlockFreq(DirectSucc, BlockFreqForDirectSucc);
       BlockFrequency NewBlockFreqForTarget =
           BFI->getBlockFreq(Target) - BlockFreqForDirectSucc;
-      BFI->setBlockFreq(Target, NewBlockFreqForTarget.getFrequency());
+      BFI->setBlockFreq(Target, NewBlockFreqForTarget);
     }
 
     // Ok, now fix up the PHIs. We know the two blocks only have PHIs, and that
@@ -453,8 +449,8 @@ bool llvm::SplitIndirectBrCriticalEdges(Function &F,
 
       // Create a PHI in the body block, to merge the direct and indirect
       // predecessors.
-      PHINode *MergePHI =
-          PHINode::Create(IndPHI->getType(), 2, "merge", &*MergeInsert);
+      PHINode *MergePHI = PHINode::Create(IndPHI->getType(), 2, "merge");
+      MergePHI->insertBefore(MergeInsert);
       MergePHI->addIncoming(NewIndPHI, Target);
       MergePHI->addIncoming(DirPHI, DirectSucc);
 

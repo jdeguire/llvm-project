@@ -7,23 +7,30 @@
 //===----------------------------------------------------------------------===//
 
 #include "EvalEmitter.h"
+#include "ByteCodeGenError.h"
 #include "Context.h"
+#include "IntegralAP.h"
 #include "Interp.h"
 #include "Opcode.h"
-#include "Program.h"
 #include "clang/AST/DeclCXX.h"
 
 using namespace clang;
 using namespace clang::interp;
 
-using APSInt = llvm::APSInt;
-template <typename T> using Expected = llvm::Expected<T>;
-
 EvalEmitter::EvalEmitter(Context &Ctx, Program &P, State &Parent,
                          InterpStack &Stk, APValue &Result)
     : Ctx(Ctx), P(P), S(Parent, P, Stk, Ctx, this), Result(Result) {
   // Create a dummy frame for the interpreter which does not have locals.
-  S.Current = new InterpFrame(S, nullptr, nullptr, CodePtr(), Pointer());
+  S.Current =
+      new InterpFrame(S, /*Func=*/nullptr, /*Caller=*/nullptr, CodePtr());
+}
+
+EvalEmitter::~EvalEmitter() {
+  for (auto &[K, V] : Locals) {
+    Block *B = reinterpret_cast<Block *>(V.get());
+    if (B->isInitialized())
+      B->invokeDtor();
+  }
 }
 
 llvm::Expected<bool> EvalEmitter::interpretExpr(const Expr *E) {
@@ -53,6 +60,16 @@ Scope::Local EvalEmitter::createLocal(Descriptor *D) {
   auto Memory = std::make_unique<char[]>(sizeof(Block) + D->getAllocSize());
   auto *B = new (Memory.get()) Block(D, /*isStatic=*/false);
   B->invokeCtor();
+
+  // Initialize local variable inline descriptor.
+  InlineDescriptor &Desc = *reinterpret_cast<InlineDescriptor *>(B->rawData());
+  Desc.Desc = D;
+  Desc.Offset = sizeof(InlineDescriptor);
+  Desc.IsActive = true;
+  Desc.IsBase = false;
+  Desc.IsFieldMutable = false;
+  Desc.IsConst = false;
+  Desc.IsInitialized = false;
 
   // Register the local.
   unsigned Off = Locals.size();
@@ -108,22 +125,22 @@ bool EvalEmitter::emitRetValue(const SourceInfo &Info) {
   // Method to recursively traverse composites.
   std::function<bool(QualType, const Pointer &, APValue &)> Composite;
   Composite = [this, &Composite](QualType Ty, const Pointer &Ptr, APValue &R) {
-    if (auto *AT = Ty->getAs<AtomicType>())
+    if (const auto *AT = Ty->getAs<AtomicType>())
       Ty = AT->getValueType();
 
-    if (auto *RT = Ty->getAs<RecordType>()) {
-      auto *Record = Ptr.getRecord();
+    if (const auto *RT = Ty->getAs<RecordType>()) {
+      const auto *Record = Ptr.getRecord();
       assert(Record && "Missing record descriptor");
 
       bool Ok = true;
       if (RT->getDecl()->isUnion()) {
         const FieldDecl *ActiveField = nullptr;
         APValue Value;
-        for (auto &F : Record->fields()) {
+        for (const auto &F : Record->fields()) {
           const Pointer &FP = Ptr.atField(F.Offset);
           QualType FieldTy = F.Decl->getType();
           if (FP.isActive()) {
-            if (llvm::Optional<PrimType> T = Ctx.classify(FieldTy)) {
+            if (std::optional<PrimType> T = Ctx.classify(FieldTy)) {
               TYPE_SWITCH(*T, Ok &= ReturnValue<T>(FP.deref<T>(), Value));
             } else {
               Ok &= Composite(FieldTy, FP, Value);
@@ -145,7 +162,7 @@ bool EvalEmitter::emitRetValue(const SourceInfo &Info) {
           const Pointer &FP = Ptr.atField(FD->Offset);
           APValue &Value = R.getStructField(I);
 
-          if (llvm::Optional<PrimType> T = Ctx.classify(FieldTy)) {
+          if (std::optional<PrimType> T = Ctx.classify(FieldTy)) {
             TYPE_SWITCH(*T, Ok &= ReturnValue<T>(FP.deref<T>(), Value));
           } else {
             Ok &= Composite(FieldTy, FP, Value);
@@ -168,7 +185,13 @@ bool EvalEmitter::emitRetValue(const SourceInfo &Info) {
       }
       return Ok;
     }
-    if (auto *AT = Ty->getAsArrayTypeUnsafe()) {
+
+    if (Ty->isIncompleteArrayType()) {
+      R = APValue(APValue::UninitArray(), 0, 0);
+      return true;
+    }
+
+    if (const auto *AT = Ty->getAsArrayTypeUnsafe()) {
       const size_t NumElems = Ptr.getNumElems();
       QualType ElemTy = AT->getElementType();
       R = APValue(APValue::UninitArray{}, NumElems, NumElems);
@@ -177,13 +200,34 @@ bool EvalEmitter::emitRetValue(const SourceInfo &Info) {
       for (unsigned I = 0; I < NumElems; ++I) {
         APValue &Slot = R.getArrayInitializedElt(I);
         const Pointer &EP = Ptr.atIndex(I);
-        if (llvm::Optional<PrimType> T = Ctx.classify(ElemTy)) {
+        if (std::optional<PrimType> T = Ctx.classify(ElemTy)) {
           TYPE_SWITCH(*T, Ok &= ReturnValue<T>(EP.deref<T>(), Slot));
         } else {
           Ok &= Composite(ElemTy, EP.narrow(), Slot);
         }
       }
       return Ok;
+    }
+
+    // Complex types.
+    if (const auto *CT = Ty->getAs<ComplexType>()) {
+      QualType ElemTy = CT->getElementType();
+      std::optional<PrimType> ElemT = Ctx.classify(ElemTy);
+      assert(ElemT);
+
+      if (ElemTy->isIntegerType()) {
+        INT_TYPE_SWITCH(*ElemT, {
+          auto V1 = Ptr.atIndex(0).deref<T>();
+          auto V2 = Ptr.atIndex(1).deref<T>();
+          Result = APValue(V1.toAPSInt(), V2.toAPSInt());
+          return true;
+        });
+      } else if (ElemTy->isFloatingType()) {
+        Result = APValue(Ptr.atIndex(0).deref<Floating>().getAPFloat(),
+                         Ptr.atIndex(1).deref<Floating>().getAPFloat());
+        return true;
+      }
+      return false;
     }
     llvm_unreachable("invalid value to return");
   };
@@ -197,9 +241,8 @@ bool EvalEmitter::emitGetPtrLocal(uint32_t I, const SourceInfo &Info) {
   if (!isActive())
     return true;
 
-  auto It = Locals.find(I);
-  assert(It != Locals.end() && "Missing local variable");
-  S.Stk.push<Pointer>(reinterpret_cast<Block *>(It->second.get()));
+  Block *B = getLocal(I);
+  S.Stk.push<Pointer>(B, sizeof(InlineDescriptor));
   return true;
 }
 
@@ -210,10 +253,8 @@ bool EvalEmitter::emitGetLocal(uint32_t I, const SourceInfo &Info) {
 
   using T = typename PrimConv<OpType>::T;
 
-  auto It = Locals.find(I);
-  assert(It != Locals.end() && "Missing local variable");
-  auto *B = reinterpret_cast<Block *>(It->second.get());
-  S.Stk.push<T>(*reinterpret_cast<T *>(B + 1));
+  Block *B = getLocal(I);
+  S.Stk.push<T>(*reinterpret_cast<T *>(B->data()));
   return true;
 }
 
@@ -224,10 +265,11 @@ bool EvalEmitter::emitSetLocal(uint32_t I, const SourceInfo &Info) {
 
   using T = typename PrimConv<OpType>::T;
 
-  auto It = Locals.find(I);
-  assert(It != Locals.end() && "Missing local variable");
-  auto *B = reinterpret_cast<Block *>(It->second.get());
-  *reinterpret_cast<T *>(B + 1) = S.Stk.pop<T>();
+  Block *B = getLocal(I);
+  *reinterpret_cast<T *>(B->data()) = S.Stk.pop<T>();
+  InlineDescriptor &Desc = *reinterpret_cast<InlineDescriptor *>(B->rawData());
+  Desc.IsInitialized = true;
+
   return true;
 }
 
@@ -236,9 +278,8 @@ bool EvalEmitter::emitDestroy(uint32_t I, const SourceInfo &Info) {
     return true;
 
   for (auto &Local : Descriptors[I]) {
-    auto It = Locals.find(Local.Offset);
-    assert(It != Locals.end() && "Missing local variable");
-    S.deallocate(reinterpret_cast<Block *>(It->second.get()));
+    Block *B = getLocal(Local.Offset);
+    S.deallocate(B);
   }
 
   return true;

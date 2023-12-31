@@ -20,153 +20,131 @@ using namespace dataflow;
 class DataflowAnalysisContextTest : public ::testing::Test {
 protected:
   DataflowAnalysisContextTest()
-      : Context(std::make_unique<WatchedLiteralsSolver>()) {}
+      : Context(std::make_unique<WatchedLiteralsSolver>()), A(Context.arena()) {
+  }
 
   DataflowAnalysisContext Context;
+  Arena &A;
 };
 
-TEST_F(DataflowAnalysisContextTest,
-       CreateAtomicBoolValueReturnsDistinctValues) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &Y = Context.createAtomicBoolValue();
-  EXPECT_NE(&X, &Y);
-}
-
-TEST_F(DataflowAnalysisContextTest,
-       GetOrCreateConjunctionValueReturnsSameExprGivenSameArgs) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &XAndX = Context.getOrCreateConjunctionValue(X, X);
-  EXPECT_EQ(&XAndX, &X);
-}
-
-TEST_F(DataflowAnalysisContextTest,
-       GetOrCreateConjunctionValueReturnsSameExprOnSubsequentCalls) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &Y = Context.createAtomicBoolValue();
-  auto &XAndY1 = Context.getOrCreateConjunctionValue(X, Y);
-  auto &XAndY2 = Context.getOrCreateConjunctionValue(X, Y);
-  EXPECT_EQ(&XAndY1, &XAndY2);
-
-  auto &YAndX = Context.getOrCreateConjunctionValue(Y, X);
-  EXPECT_EQ(&XAndY1, &YAndX);
-
-  auto &Z = Context.createAtomicBoolValue();
-  auto &XAndZ = Context.getOrCreateConjunctionValue(X, Z);
-  EXPECT_NE(&XAndY1, &XAndZ);
-}
-
-TEST_F(DataflowAnalysisContextTest,
-       GetOrCreateDisjunctionValueReturnsSameExprGivenSameArgs) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &XOrX = Context.getOrCreateDisjunctionValue(X, X);
-  EXPECT_EQ(&XOrX, &X);
-}
-
-TEST_F(DataflowAnalysisContextTest,
-       GetOrCreateDisjunctionValueReturnsSameExprOnSubsequentCalls) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &Y = Context.createAtomicBoolValue();
-  auto &XOrY1 = Context.getOrCreateDisjunctionValue(X, Y);
-  auto &XOrY2 = Context.getOrCreateDisjunctionValue(X, Y);
-  EXPECT_EQ(&XOrY1, &XOrY2);
-
-  auto &YOrX = Context.getOrCreateDisjunctionValue(Y, X);
-  EXPECT_EQ(&XOrY1, &YOrX);
-
-  auto &Z = Context.createAtomicBoolValue();
-  auto &XOrZ = Context.getOrCreateDisjunctionValue(X, Z);
-  EXPECT_NE(&XOrY1, &XOrZ);
-}
-
-TEST_F(DataflowAnalysisContextTest,
-       GetOrCreateNegationValueReturnsSameExprOnSubsequentCalls) {
-  auto &X = Context.createAtomicBoolValue();
-  auto &NotX1 = Context.getOrCreateNegationValue(X);
-  auto &NotX2 = Context.getOrCreateNegationValue(X);
-  EXPECT_EQ(&NotX1, &NotX2);
-
-  auto &Y = Context.createAtomicBoolValue();
-  auto &NotY = Context.getOrCreateNegationValue(Y);
-  EXPECT_NE(&NotX1, &NotY);
+TEST_F(DataflowAnalysisContextTest, DistinctTopsNotEquivalent) {
+  auto &X = A.makeTopValue();
+  auto &Y = A.makeTopValue();
+  EXPECT_FALSE(Context.equivalentFormulas(X.formula(), Y.formula()));
 }
 
 TEST_F(DataflowAnalysisContextTest, EmptyFlowCondition) {
-  auto &FC = Context.makeFlowConditionToken();
-  auto &C = Context.createAtomicBoolValue();
+  Atom FC = A.makeFlowConditionToken();
+  auto &C = A.makeAtomRef(A.makeAtom());
   EXPECT_FALSE(Context.flowConditionImplies(FC, C));
 }
 
 TEST_F(DataflowAnalysisContextTest, AddFlowConditionConstraint) {
-  auto &FC = Context.makeFlowConditionToken();
-  auto &C = Context.createAtomicBoolValue();
+  Atom FC = A.makeFlowConditionToken();
+  auto &C = A.makeAtomRef(A.makeAtom());
   Context.addFlowConditionConstraint(FC, C);
   EXPECT_TRUE(Context.flowConditionImplies(FC, C));
 }
 
+TEST_F(DataflowAnalysisContextTest, AddInvariant) {
+  Atom FC = A.makeFlowConditionToken();
+  auto &C = A.makeAtomRef(A.makeAtom());
+  Context.addInvariant(C);
+  EXPECT_TRUE(Context.flowConditionImplies(FC, C));
+}
+
+TEST_F(DataflowAnalysisContextTest, InvariantAndFCConstraintInteract) {
+  Atom FC = A.makeFlowConditionToken();
+  auto &C = A.makeAtomRef(A.makeAtom());
+  auto &D = A.makeAtomRef(A.makeAtom());
+  Context.addInvariant(A.makeImplies(C, D));
+  Context.addFlowConditionConstraint(FC, C);
+  EXPECT_TRUE(Context.flowConditionImplies(FC, D));
+}
+
 TEST_F(DataflowAnalysisContextTest, ForkFlowCondition) {
-  auto &FC1 = Context.makeFlowConditionToken();
-  auto &C1 = Context.createAtomicBoolValue();
+  Atom FC1 = A.makeFlowConditionToken();
+  auto &C1 = A.makeAtomRef(A.makeAtom());
   Context.addFlowConditionConstraint(FC1, C1);
 
   // Forked flow condition inherits the constraints of its parent flow
   // condition.
-  auto &FC2 = Context.forkFlowCondition(FC1);
+  Atom FC2 = Context.forkFlowCondition(FC1);
   EXPECT_TRUE(Context.flowConditionImplies(FC2, C1));
 
   // Adding a new constraint to the forked flow condition does not affect its
   // parent flow condition.
-  auto &C2 = Context.createAtomicBoolValue();
+  auto &C2 = A.makeAtomRef(A.makeAtom());
   Context.addFlowConditionConstraint(FC2, C2);
   EXPECT_TRUE(Context.flowConditionImplies(FC2, C2));
   EXPECT_FALSE(Context.flowConditionImplies(FC1, C2));
 }
 
 TEST_F(DataflowAnalysisContextTest, JoinFlowConditions) {
-  auto &C1 = Context.createAtomicBoolValue();
-  auto &C2 = Context.createAtomicBoolValue();
-  auto &C3 = Context.createAtomicBoolValue();
+  auto &C1 = A.makeAtomRef(A.makeAtom());
+  auto &C2 = A.makeAtomRef(A.makeAtom());
+  auto &C3 = A.makeAtomRef(A.makeAtom());
 
-  auto &FC1 = Context.makeFlowConditionToken();
+  Atom FC1 = A.makeFlowConditionToken();
   Context.addFlowConditionConstraint(FC1, C1);
   Context.addFlowConditionConstraint(FC1, C3);
 
-  auto &FC2 = Context.makeFlowConditionToken();
+  Atom FC2 = A.makeFlowConditionToken();
   Context.addFlowConditionConstraint(FC2, C2);
   Context.addFlowConditionConstraint(FC2, C3);
 
-  auto &FC3 = Context.joinFlowConditions(FC1, FC2);
+  Atom FC3 = Context.joinFlowConditions(FC1, FC2);
   EXPECT_FALSE(Context.flowConditionImplies(FC3, C1));
   EXPECT_FALSE(Context.flowConditionImplies(FC3, C2));
   EXPECT_TRUE(Context.flowConditionImplies(FC3, C3));
 }
 
-TEST_F(DataflowAnalysisContextTest, FlowConditionTautologies) {
-  // Fresh flow condition with empty/no constraints is always true.
-  auto &FC1 = Context.makeFlowConditionToken();
-  EXPECT_TRUE(Context.flowConditionIsTautology(FC1));
+TEST_F(DataflowAnalysisContextTest, EquivBoolVals) {
+  auto &X = A.makeAtomRef(A.makeAtom());
+  auto &Y = A.makeAtomRef(A.makeAtom());
+  auto &Z = A.makeAtomRef(A.makeAtom());
+  auto &True = A.makeLiteral(true);
+  auto &False = A.makeLiteral(false);
 
-  // Literal `true` is always true.
-  auto &FC2 = Context.makeFlowConditionToken();
-  Context.addFlowConditionConstraint(FC2, Context.getBoolLiteralValue(true));
-  EXPECT_TRUE(Context.flowConditionIsTautology(FC2));
+  // X == X
+  EXPECT_TRUE(Context.equivalentFormulas(X, X));
+  // X != Y
+  EXPECT_FALSE(Context.equivalentFormulas(X, Y));
 
-  // Literal `false` is never true.
-  auto &FC3 = Context.makeFlowConditionToken();
-  Context.addFlowConditionConstraint(FC3, Context.getBoolLiteralValue(false));
-  EXPECT_FALSE(Context.flowConditionIsTautology(FC3));
+  // !X != X
+  EXPECT_FALSE(Context.equivalentFormulas(A.makeNot(X), X));
+  // !(!X) = X
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeNot(A.makeNot(X)), X));
 
-  // We can't prove that an arbitrary bool A is always true...
-  auto &C1 = Context.createAtomicBoolValue();
-  auto &FC4 = Context.makeFlowConditionToken();
-  Context.addFlowConditionConstraint(FC4, C1);
-  EXPECT_FALSE(Context.flowConditionIsTautology(FC4));
+  // (X || X) == X
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeOr(X, X), X));
+  // (X || Y) != X
+  EXPECT_FALSE(Context.equivalentFormulas(A.makeOr(X, Y), X));
+  // (X || True) == True
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeOr(X, True), True));
+  // (X || False) == X
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeOr(X, False), X));
 
-  // ... but we can prove A || !A is true.
-  auto &FC5 = Context.makeFlowConditionToken();
-  Context.addFlowConditionConstraint(
-      FC5, Context.getOrCreateDisjunctionValue(
-               C1, Context.getOrCreateNegationValue(C1)));
-  EXPECT_TRUE(Context.flowConditionIsTautology(FC5));
+  // (X && X) == X
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeAnd(X, X), X));
+  // (X && Y) != X
+  EXPECT_FALSE(Context.equivalentFormulas(A.makeAnd(X, Y), X));
+  // (X && True) == X
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeAnd(X, True), X));
+  // (X && False) == False
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeAnd(X, False), False));
+
+  // (X || Y) == (Y || X)
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeOr(X, Y), A.makeOr(Y, X)));
+  // (X && Y) == (Y && X)
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeAnd(X, Y), A.makeAnd(Y, X)));
+
+  // ((X || Y) || Z) == (X || (Y || Z))
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeOr(A.makeOr(X, Y), Z),
+                                         A.makeOr(X, A.makeOr(Y, Z))));
+  // ((X && Y) && Z) == (X && (Y && Z))
+  EXPECT_TRUE(Context.equivalentFormulas(A.makeAnd(A.makeAnd(X, Y), Z),
+                                         A.makeAnd(X, A.makeAnd(Y, Z))));
 }
 
 } // namespace

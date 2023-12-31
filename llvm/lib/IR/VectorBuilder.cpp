@@ -32,9 +32,7 @@ Module &VectorBuilder::getModule() const {
 }
 
 Value *VectorBuilder::getAllTrueMask() {
-  auto *BoolTy = Builder.getInt1Ty();
-  auto *MaskTy = VectorType::get(BoolTy, StaticVectorLength);
-  return ConstantInt::getAllOnesValue(MaskTy);
+  return Builder.getAllOnesMask(StaticVectorLength);
 }
 
 Value &VectorBuilder::requestMask() {
@@ -90,9 +88,9 @@ Value *VectorBuilder::createVectorInstruction(unsigned Opcode, Type *ReturnTy,
     }
   }
 
-  if (MaskPosOpt.hasValue())
+  if (MaskPosOpt)
     IntrinParams[*MaskPosOpt] = &requestMask();
-  if (VLenPosOpt.hasValue())
+  if (VLenPosOpt)
     IntrinParams[*VLenPosOpt] = &requestEVL();
 
   auto *VPDecl = VPIntrinsic::getDeclarationForParams(&getModule(), VPID,

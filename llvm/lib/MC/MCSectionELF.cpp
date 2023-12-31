@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCSectionELF.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 #include <cassert>
 
 using namespace llvm;
@@ -123,6 +123,9 @@ void MCSectionELF::printSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
   } else if (Arch == Triple::hexagon) {
     if (Flags & ELF::SHF_HEX_GPREL)
       OS << 's';
+  } else if (Arch == Triple::x86_64) {
+    if (Flags & ELF::SHF_X86_64_LARGE)
+      OS << 'l';
   }
 
   OS << '"';
@@ -165,6 +168,12 @@ void MCSectionELF::printSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
     OS << "llvm_sympart";
   else if (Type == ELF::SHT_LLVM_BB_ADDR_MAP)
     OS << "llvm_bb_addr_map";
+  else if (Type == ELF::SHT_LLVM_BB_ADDR_MAP_V0)
+    OS << "llvm_bb_addr_map_v0";
+  else if (Type == ELF::SHT_LLVM_OFFLOADING)
+    OS << "llvm_offloading";
+  else if (Type == ELF::SHT_LLVM_LTO)
+    OS << "llvm_lto";
   else
     report_fatal_error("unsupported type 0x" + Twine::utohexstr(Type) +
                        " for section " + getName());

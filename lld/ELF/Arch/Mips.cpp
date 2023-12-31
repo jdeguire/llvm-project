@@ -129,7 +129,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
       return R_MIPS_GOT_GP_PC;
     if (&s == ElfSym::mipsLocalGp)
       return R_MIPS_GOT_GP;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case R_MIPS_32:
   case R_MIPS_64:
   case R_MIPS_GOT_OFST:
@@ -174,7 +174,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_GOT16:
     if (s.isLocal())
       return R_MIPS_GOT_LOCAL_PAGE;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case R_MIPS_CALL16:
   case R_MIPS_GOT_DISP:
   case R_MIPS_TLS_GOTTPREL:
@@ -233,7 +233,7 @@ template <endianness E> static uint32_t readShuffle(const uint8_t *loc) {
   // words in a big-endian order. That is why we have to swap these
   // words to get a correct value.
   uint32_t v = read32(loc);
-  if (E == support::little)
+  if (E == llvm::endianness::little)
     return (v << 16) | (v >> 16);
   return v;
 }
@@ -280,12 +280,12 @@ static void writeShuffleValue(uint8_t *loc, uint64_t v, uint8_t bitsSize,
                               uint8_t shift) {
   // See comments in readShuffle for purpose of this code.
   uint16_t *words = (uint16_t *)loc;
-  if (E == support::little)
+  if (E == llvm::endianness::little)
     std::swap(words[0], words[1]);
 
   writeValue(loc, v, bitsSize, shift);
 
-  if (E == support::little)
+  if (E == llvm::endianness::little)
     std::swap(words[0], words[1]);
 }
 
@@ -726,7 +726,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MIPS_TLS_GOTTPREL:
   case R_MIPS_TLS_LDM:
     checkInt(loc, val, 16, rel);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case R_MIPS_CALL_LO16:
   case R_MIPS_GOT_LO16:
   case R_MIPS_GOT_OFST:

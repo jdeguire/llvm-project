@@ -14,6 +14,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/CodeGen/SafeStack.h"
 #include "SafeStackLayout.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -67,6 +68,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -191,7 +193,7 @@ public:
   SafeStack(Function &F, const TargetLoweringBase &TL, const DataLayout &DL,
             DomTreeUpdater *DTU, ScalarEvolution &SE)
       : F(F), TL(TL), DL(DL), DTU(DTU), SE(SE),
-        StackPtrTy(Type::getInt8PtrTy(F.getContext())),
+        StackPtrTy(PointerType::getUnqual(F.getContext())),
         IntPtrTy(DL.getIntPtrType(F.getContext())),
         Int32Ty(Type::getInt32Ty(F.getContext())),
         Int8Ty(Type::getInt8Ty(F.getContext())) {}
@@ -340,7 +342,7 @@ bool SafeStack::IsSafeStackAlloca(const Value *AllocaPtr, uint64_t AllocaSize) {
         // analysis here, which would look at all uses of an argument inside
         // the function being called.
         auto B = CS.arg_begin(), E = CS.arg_end();
-        for (auto A = B; A != E; ++A)
+        for (const auto *A = B; A != E; ++A)
           if (A->get() == V)
             if (!(CS.doesNotCapture(A - B) && (CS.doesNotAccessMemory(A - B) ||
                                                CS.doesNotAccessMemory()))) {
@@ -498,7 +500,7 @@ Value *SafeStack::moveStaticAllocasToUnsafeStack(
   if (ClColoring)
     SSC.run();
 
-  for (auto *I : SSC.getMarkers()) {
+  for (const auto *I : SSC.getMarkers()) {
     auto *Op = dyn_cast<Instruction>(I->getOperand(1));
     const_cast<IntrinsicInst *>(I)->eraseFromParent();
     // Remove the operand bitcast, too, if it has no more uses left.
@@ -792,7 +794,7 @@ bool SafeStack::run() {
         DILocation::get(SP->getContext(), SP->getScopeLine(), 0, SP));
   if (SafeStackUsePointerAddress) {
     FunctionCallee Fn = F.getParent()->getOrInsertFunction(
-        "__safestack_pointer_address", StackPtrTy->getPointerTo(0));
+        "__safestack_pointer_address", IRB.getPtrTy(0));
     UnsafeStackPtr = IRB.CreateCall(Fn);
   } else {
     UnsafeStackPtr = TL.getSafeStackPointerLocation(IRB);
@@ -896,7 +898,7 @@ public:
 
     DominatorTree *DT;
     bool ShouldPreserveDominatorTree;
-    Optional<DominatorTree> LazilyComputedDomTree;
+    std::optional<DominatorTree> LazilyComputedDomTree;
 
     // Do we already have a DominatorTree avaliable from the previous pass?
     // Note that we should *NOT* require it, to avoid the case where we end up
@@ -907,7 +909,7 @@ public:
     } else {
       // Otherwise, we need to compute it.
       LazilyComputedDomTree.emplace(F);
-      DT = LazilyComputedDomTree.getPointer();
+      DT = &*LazilyComputedDomTree;
       ShouldPreserveDominatorTree = false;
     }
 
@@ -925,6 +927,42 @@ public:
 };
 
 } // end anonymous namespace
+
+PreservedAnalyses SafeStackPass::run(Function &F,
+                                     FunctionAnalysisManager &FAM) {
+  LLVM_DEBUG(dbgs() << "[SafeStack] Function: " << F.getName() << "\n");
+
+  if (!F.hasFnAttribute(Attribute::SafeStack)) {
+    LLVM_DEBUG(dbgs() << "[SafeStack]     safestack is not requested"
+                         " for this function\n");
+    return PreservedAnalyses::all();
+  }
+
+  if (F.isDeclaration()) {
+    LLVM_DEBUG(dbgs() << "[SafeStack]     function definition"
+                         " is not available\n");
+    return PreservedAnalyses::all();
+  }
+
+  auto *TL = TM->getSubtargetImpl(F)->getTargetLowering();
+  if (!TL)
+    report_fatal_error("TargetLowering instance is required");
+
+  auto &DL = F.getParent()->getDataLayout();
+
+  // preserve DominatorTree
+  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Lazy);
+
+  bool Changed = SafeStack(F, *TL, DL, &DTU, SE).run();
+
+  if (!Changed)
+    return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserve<DominatorTreeAnalysis>();
+  return PA;
+}
 
 char SafeStackLegacyPass::ID = 0;
 

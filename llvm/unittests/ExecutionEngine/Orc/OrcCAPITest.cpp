@@ -9,23 +9,27 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Error.h"
 #include "llvm-c/LLJIT.h"
+#include "llvm-c/LLJITUtils.h"
 #include "llvm-c/Orc.h"
 #include "gtest/gtest.h"
 
-#include "llvm/ADT/Triple.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
+#include "llvm/ExecutionEngine/Orc/TargetProcess/JITLoaderGDB.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Testing/Support/Error.h"
 #include <string>
 
 using namespace llvm;
 using namespace llvm::orc;
 
+DEFINE_SIMPLE_CONVERSION_FUNCTIONS(ObjectLayer, LLVMOrcObjectLayerRef)
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(ThreadSafeModule, LLVMOrcThreadSafeModuleRef)
 
 // OrcCAPITestBase contains several helper methods and pointers for unit tests
@@ -120,10 +124,7 @@ protected:
     // TODO: Print error messages in failure logs, use them to audit this list.
     // Some architectures may be unsupportable or missing key components, but
     // some may just be failing due to bugs in this testcase.
-    if (Triple.startswith("armv7") || Triple.startswith("armv8l"))
-      return false;
-    llvm::Triple T(Triple);
-    if (T.isOSAIX() && T.isPPC64())
+    if (Triple.starts_with("armv7") || Triple.starts_with("armv8l"))
       return false;
     return true;
   }
@@ -212,6 +213,20 @@ constexpr StringRef SumExample =
       %r = add nsw i32 %x, %y
       ret i32 %r
     }
+  )";
+
+constexpr StringRef SumDebugExample =
+    R"(
+    define i32 @sum(i32 %x, i32 %y) {
+    entry:
+      %r = add nsw i32 %x, %y
+      ret i32 %r
+    }
+    !llvm.module.flags = !{!0}
+    !llvm.dbg.cu = !{!1}
+    !0 = !{i32 2, !"Debug Info Version", i32 3}
+    !1 = distinct !DICompileUnit(language: DW_LANG_C99, file: !2, emissionKind: FullDebug)
+    !2 = !DIFile(filename: "sum.c", directory: "/tmp")
   )";
 
 } // end anonymous namespace.
@@ -425,7 +440,11 @@ TEST_F(OrcCAPITestBase, DefinitionGenerators) {
   ASSERT_EQ(ExpectedAddr, OutAddr);
 }
 
+#if defined(_AIX)
+TEST_F(OrcCAPITestBase, DISABLED_ResourceTrackerDefinitionLifetime) {
+#else
 TEST_F(OrcCAPITestBase, ResourceTrackerDefinitionLifetime) {
+#endif
   // This test case ensures that all symbols loaded into a JITDylib with a
   // ResourceTracker attached are cleared from the JITDylib once the RT is
   // removed.
@@ -450,7 +469,11 @@ TEST_F(OrcCAPITestBase, ResourceTrackerDefinitionLifetime) {
   LLVMOrcReleaseResourceTracker(RT);
 }
 
+#if defined(_AIX)
+TEST_F(OrcCAPITestBase, DISABLED_ResourceTrackerTransfer) {
+#else
 TEST_F(OrcCAPITestBase, ResourceTrackerTransfer) {
+#endif
   LLVMOrcResourceTrackerRef DefaultRT =
       LLVMOrcJITDylibGetDefaultResourceTracker(MainDylib);
   LLVMOrcResourceTrackerRef RT2 =
@@ -469,7 +492,11 @@ TEST_F(OrcCAPITestBase, ResourceTrackerTransfer) {
   LLVMOrcReleaseResourceTracker(RT2);
 }
 
+#if defined(_AIX)
+TEST_F(OrcCAPITestBase, DISABLED_AddObjectBuffer) {
+#else
 TEST_F(OrcCAPITestBase, AddObjectBuffer) {
+#endif
   LLVMOrcObjectLayerRef ObjLinkingLayer = LLVMOrcLLJITGetObjLinkingLayer(Jit);
   LLVMMemoryBufferRef ObjBuffer = createTestObject(SumExample, "sum.ll");
 
@@ -485,7 +512,84 @@ TEST_F(OrcCAPITestBase, AddObjectBuffer) {
   ASSERT_TRUE(!!SumAddr);
 }
 
+// This must be kept in sync with gdb/gdb/jit.h .
+extern "C" {
+
+typedef enum {
+  JIT_NOACTION = 0,
+  JIT_REGISTER_FN,
+  JIT_UNREGISTER_FN
+} jit_actions_t;
+
+struct jit_code_entry {
+  struct jit_code_entry *next_entry;
+  struct jit_code_entry *prev_entry;
+  const char *symfile_addr;
+  uint64_t symfile_size;
+};
+
+struct jit_descriptor {
+  uint32_t version;
+  // This should be jit_actions_t, but we want to be specific about the
+  // bit-width.
+  uint32_t action_flag;
+  struct jit_code_entry *relevant_entry;
+  struct jit_code_entry *first_entry;
+};
+
+// We put information about the JITed function in this global, which the
+// debugger reads.  Make sure to specify the version statically, because the
+// debugger checks the version before we can set it during runtime.
+extern struct jit_descriptor __jit_debug_descriptor;
+
+static void *findLastDebugDescriptorEntryPtr() {
+  struct jit_code_entry *Last = __jit_debug_descriptor.first_entry;
+  while (Last && Last->next_entry)
+    Last = Last->next_entry;
+  return Last;
+}
+}
+
+#if defined(_AIX) or not(defined(__ELF__) or defined(__MACH__))
+TEST_F(OrcCAPITestBase, DISABLED_EnableDebugSupport) {
+#else
+static LLVM_ATTRIBUTE_USED void linkComponents() {
+  errs() << "Linking in runtime functions\n"
+         << (void *)&llvm_orc_registerJITLoaderGDBWrapper << '\n'
+         << (void *)&llvm_orc_registerJITLoaderGDBAllocAction << '\n';
+}
+TEST_F(OrcCAPITestBase, EnableDebugSupport) {
+#endif
+  void *Before = findLastDebugDescriptorEntryPtr();
+  LLVMMemoryBufferRef ObjBuffer = createTestObject(SumDebugExample, "sum.ll");
+  LLVMOrcObjectLayerRef ObjLayer = LLVMOrcLLJITGetObjLinkingLayer(Jit);
+
+  if (LLVMErrorRef E = LLVMOrcLLJITEnableDebugSupport(Jit)) {
+    EXPECT_FALSE(isa<ObjectLinkingLayer>(unwrap(ObjLayer)))
+        << "Error testing LLJIT debug support "
+        << "(triple = " << TargetTriple << "): " << toString(E);
+    GTEST_SKIP() << "LLJIT C bindings provide debug support only for JITLink";
+  }
+
+  if (LLVMErrorRef E =
+          LLVMOrcObjectLayerAddObjectFile(ObjLayer, MainDylib, ObjBuffer))
+    FAIL() << "Failed to add object file to ObjLinkingLayer (triple = "
+           << TargetTriple << "): " << toString(E);
+
+  LLVMOrcJITTargetAddress SumAddr;
+  if (LLVMErrorRef E = LLVMOrcLLJITLookup(Jit, &SumAddr, "sum"))
+    FAIL() << "Symbol \"sum\" was not added into JIT (triple = " << TargetTriple
+           << "): " << toString(E);
+
+  void *After = findLastDebugDescriptorEntryPtr();
+  ASSERT_NE(Before, After);
+}
+
+#if defined(_AIX)
+TEST_F(OrcCAPITestBase, DISABLED_ExecutionTest) {
+#else
 TEST_F(OrcCAPITestBase, ExecutionTest) {
+#endif
   using SumFunctionType = int32_t (*)(int32_t, int32_t);
 
   // This test performs OrcJIT compilation of a simple sum module
@@ -631,7 +735,6 @@ void Materialize(void *Ctx, LLVMOrcMaterializationResponsibilityRef MR) {
 
   LLVMOrcMaterializationResponsibilityNotifyEmitted(MR);
   LLVMOrcDisposeMaterializationResponsibility(MR);
-  return;
 }
 
 TEST_F(OrcCAPITestBase, MaterializationResponsibility) {

@@ -12,13 +12,25 @@
 //===----------------------------------------------------------------------===//
 
 #include "ReduceInstructions.h"
+#include "Utils.h"
 #include "llvm/IR/Constants.h"
+#include <set>
 
 using namespace llvm;
 
+/// Filter out cases where deleting the instruction will likely cause the
+/// user/def of the instruction to fail the verifier.
+//
+// TODO: Technically the verifier only enforces preallocated token usage and
+// there is a none token.
+static bool shouldAlwaysKeep(const Instruction &I) {
+  return I.isEHPad() || I.getType()->isTokenTy() || I.isSwiftError();
+}
+
 /// Removes out-of-chunk arguments from functions, and modifies their calls
 /// accordingly. It also removes allocations of out-of-chunk arguments.
-static void extractInstrFromModule(Oracle &O, Module &Program) {
+static void extractInstrFromModule(Oracle &O, ReducerWorkItem &WorkItem) {
+  Module &Program = WorkItem.getModule();
   std::vector<Instruction *> InitInstToKeep;
 
   for (auto &F : Program)
@@ -26,9 +38,10 @@ static void extractInstrFromModule(Oracle &O, Module &Program) {
       // Removing the terminator would make the block invalid. Only iterate over
       // instructions before the terminator.
       InitInstToKeep.push_back(BB.getTerminator());
-      for (auto &Inst : make_range(BB.begin(), std::prev(BB.end())))
-        if (O.shouldKeep())
+      for (auto &Inst : make_range(BB.begin(), std::prev(BB.end()))) {
+        if (shouldAlwaysKeep(Inst) || O.shouldKeep())
           InitInstToKeep.push_back(&Inst);
+      }
     }
 
   // We create a vector first, then convert it to a set, so that we don't have
@@ -42,7 +55,7 @@ static void extractInstrFromModule(Oracle &O, Module &Program) {
     for (auto &BB : F)
       for (auto &Inst : BB)
         if (!InstToKeep.count(&Inst)) {
-          Inst.replaceAllUsesWith(UndefValue::get(Inst.getType()));
+          Inst.replaceAllUsesWith(getDefaultValue(Inst.getType()));
           InstToDelete.push_back(&Inst);
         }
 
@@ -51,6 +64,5 @@ static void extractInstrFromModule(Oracle &O, Module &Program) {
 }
 
 void llvm::reduceInstructionsDeltaPass(TestRunner &Test) {
-  outs() << "*** Reducing Instructions...\n";
-  runDeltaPass(Test, extractInstrFromModule);
+  runDeltaPass(Test, extractInstrFromModule, "Reducing Instructions");
 }

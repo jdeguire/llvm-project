@@ -353,15 +353,25 @@ define <16 x i1> @ugt_v16i8(<16 x i8> %x, <16 x i8> %y) {
 ; SSE-NEXT:    pcmpgtb %xmm1, %xmm0
 ; SSE-NEXT:    retq
 ;
-; AVX-LABEL: ugt_v16i8:
-; AVX:       # %bb.0:
-; AVX-NEXT:    vpsrlw $1, %xmm0, %xmm0
-; AVX-NEXT:    vmovdqa {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
-; AVX-NEXT:    vpand %xmm2, %xmm0, %xmm0
-; AVX-NEXT:    vpsrlw $1, %xmm1, %xmm1
-; AVX-NEXT:    vpand %xmm2, %xmm1, %xmm1
-; AVX-NEXT:    vpcmpgtb %xmm1, %xmm0, %xmm0
-; AVX-NEXT:    retq
+; AVX1-LABEL: ugt_v16i8:
+; AVX1:       # %bb.0:
+; AVX1-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX1-NEXT:    vbroadcastss {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX1-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX1-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vpcmpgtb %xmm1, %xmm0, %xmm0
+; AVX1-NEXT:    retq
+;
+; AVX2-LABEL: ugt_v16i8:
+; AVX2:       # %bb.0:
+; AVX2-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX2-NEXT:    vpbroadcastb {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX2-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX2-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX2-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX2-NEXT:    vpcmpgtb %xmm1, %xmm0, %xmm0
+; AVX2-NEXT:    retq
   %sh1 = lshr <16 x i8> %x, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %sh2 = lshr <16 x i8> %y, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %cmp = icmp ugt <16 x i8> %sh1, %sh2
@@ -380,15 +390,25 @@ define <16 x i1> @ult_v16i8(<16 x i8> %x, <16 x i8> %y) {
 ; SSE-NEXT:    movdqa %xmm2, %xmm0
 ; SSE-NEXT:    retq
 ;
-; AVX-LABEL: ult_v16i8:
-; AVX:       # %bb.0:
-; AVX-NEXT:    vpsrlw $1, %xmm0, %xmm0
-; AVX-NEXT:    vmovdqa {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
-; AVX-NEXT:    vpand %xmm2, %xmm0, %xmm0
-; AVX-NEXT:    vpsrlw $1, %xmm1, %xmm1
-; AVX-NEXT:    vpand %xmm2, %xmm1, %xmm1
-; AVX-NEXT:    vpcmpgtb %xmm0, %xmm1, %xmm0
-; AVX-NEXT:    retq
+; AVX1-LABEL: ult_v16i8:
+; AVX1:       # %bb.0:
+; AVX1-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX1-NEXT:    vbroadcastss {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX1-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX1-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vpcmpgtb %xmm0, %xmm1, %xmm0
+; AVX1-NEXT:    retq
+;
+; AVX2-LABEL: ult_v16i8:
+; AVX2:       # %bb.0:
+; AVX2-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX2-NEXT:    vpbroadcastb {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX2-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX2-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX2-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX2-NEXT:    vpcmpgtb %xmm0, %xmm1, %xmm0
+; AVX2-NEXT:    retq
   %sh1 = lshr <16 x i8> %x, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %sh2 = lshr <16 x i8> %y, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %cmp = icmp ult <16 x i8> %sh1, %sh2
@@ -407,16 +427,27 @@ define <16 x i1> @uge_v16i8(<16 x i8> %x, <16 x i8> %y) {
 ; SSE-NEXT:    pcmpeqb %xmm2, %xmm0
 ; SSE-NEXT:    retq
 ;
-; AVX-LABEL: uge_v16i8:
-; AVX:       # %bb.0:
-; AVX-NEXT:    vpsrlw $1, %xmm0, %xmm0
-; AVX-NEXT:    vmovdqa {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
-; AVX-NEXT:    vpand %xmm2, %xmm0, %xmm0
-; AVX-NEXT:    vpsrlw $1, %xmm1, %xmm1
-; AVX-NEXT:    vpand %xmm2, %xmm1, %xmm1
-; AVX-NEXT:    vpmaxub %xmm1, %xmm0, %xmm1
-; AVX-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
-; AVX-NEXT:    retq
+; AVX1-LABEL: uge_v16i8:
+; AVX1:       # %bb.0:
+; AVX1-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX1-NEXT:    vbroadcastss {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX1-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX1-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vpmaxub %xmm1, %xmm0, %xmm1
+; AVX1-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
+; AVX1-NEXT:    retq
+;
+; AVX2-LABEL: uge_v16i8:
+; AVX2:       # %bb.0:
+; AVX2-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX2-NEXT:    vpbroadcastb {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX2-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX2-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX2-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX2-NEXT:    vpmaxub %xmm1, %xmm0, %xmm1
+; AVX2-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
+; AVX2-NEXT:    retq
   %sh1 = lshr <16 x i8> %x, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %sh2 = lshr <16 x i8> %y, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %cmp = icmp uge <16 x i8> %sh1, %sh2
@@ -435,16 +466,27 @@ define <16 x i1> @ule_v16i8(<16 x i8> %x, <16 x i8> %y) {
 ; SSE-NEXT:    pcmpeqb %xmm2, %xmm0
 ; SSE-NEXT:    retq
 ;
-; AVX-LABEL: ule_v16i8:
-; AVX:       # %bb.0:
-; AVX-NEXT:    vpsrlw $1, %xmm0, %xmm0
-; AVX-NEXT:    vmovdqa {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
-; AVX-NEXT:    vpand %xmm2, %xmm0, %xmm0
-; AVX-NEXT:    vpsrlw $1, %xmm1, %xmm1
-; AVX-NEXT:    vpand %xmm2, %xmm1, %xmm1
-; AVX-NEXT:    vpminub %xmm1, %xmm0, %xmm1
-; AVX-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
-; AVX-NEXT:    retq
+; AVX1-LABEL: ule_v16i8:
+; AVX1:       # %bb.0:
+; AVX1-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX1-NEXT:    vbroadcastss {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX1-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX1-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX1-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX1-NEXT:    vpminub %xmm1, %xmm0, %xmm1
+; AVX1-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
+; AVX1-NEXT:    retq
+;
+; AVX2-LABEL: ule_v16i8:
+; AVX2:       # %bb.0:
+; AVX2-NEXT:    vpsrlw $1, %xmm0, %xmm0
+; AVX2-NEXT:    vpbroadcastb {{.*#+}} xmm2 = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+; AVX2-NEXT:    vpand %xmm2, %xmm0, %xmm0
+; AVX2-NEXT:    vpsrlw $1, %xmm1, %xmm1
+; AVX2-NEXT:    vpand %xmm2, %xmm1, %xmm1
+; AVX2-NEXT:    vpminub %xmm1, %xmm0, %xmm1
+; AVX2-NEXT:    vpcmpeqb %xmm1, %xmm0, %xmm0
+; AVX2-NEXT:    retq
   %sh1 = lshr <16 x i8> %x, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %sh2 = lshr <16 x i8> %y, <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>
   %cmp = icmp ule <16 x i8> %sh1, %sh2
@@ -536,7 +578,7 @@ define <8 x i16> @PR47448_ugt(i16 signext %0) {
 }
 
 ; Recognise the knownbits from X86ISD::AND in previous block.
-define void @PR54171(<4 x i64>* %mask0, <4 x i64>* %mask1, i64 %i) {
+define void @PR54171(ptr %mask0, ptr %mask1, i64 %i) {
 ; SSE-LABEL: PR54171:
 ; SSE:       # %bb.0: # %entry
 ; SSE-NEXT:    andq $7, %rdx
@@ -601,12 +643,10 @@ if.then:
   %vecinit7.i.i = shufflevector <8 x i32> %vecinit.i.i, <8 x i32> poison, <8 x i32> zeroinitializer
   %cmp.i = icmp ugt <8 x i32> %vecinit7.i.i, <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3>
   %sext.i = sext <8 x i1> %cmp.i to <8 x i32>
-  %0 = bitcast <4 x i64>* %mask0 to <8 x i32>*
-  store <8 x i32> %sext.i, <8 x i32>* %0, align 32
+  store <8 x i32> %sext.i, ptr %mask0, align 32
   %cmp.i18 = icmp ugt <8 x i32> %vecinit7.i.i, <i32 4, i32 4, i32 5, i32 5, i32 6, i32 6, i32 7, i32 7>
   %sext.i19 = sext <8 x i1> %cmp.i18 to <8 x i32>
-  %1 = bitcast <4 x i64>* %mask1 to <8 x i32>*
-  store <8 x i32> %sext.i19, <8 x i32>* %1, align 32
+  store <8 x i32> %sext.i19, ptr %mask1, align 32
   br label %if.end
 
 if.end:

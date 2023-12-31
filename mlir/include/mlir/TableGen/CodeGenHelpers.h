@@ -13,6 +13,7 @@
 #ifndef MLIR_TABLEGEN_CODEGENHELPERS_H
 #define MLIR_TABLEGEN_CODEGENHELPERS_H
 
+#include "mlir/TableGen/Constraint.h"
 #include "mlir/TableGen/Dialect.h"
 #include "mlir/TableGen/Format.h"
 #include "llvm/ADT/DenseMap.h"
@@ -135,15 +136,16 @@ public:
   ///
   ///   LogicalResult(Operation *op, Attribute attr, StringRef attrName);
   ///
-  /// If a uniqued constraint was not found, this function returns None. The
-  /// uniqued constraints cannot be used in the context of an OpAdaptor.
+  /// If a uniqued constraint was not found, this function returns std::nullopt.
+  /// The uniqued constraints cannot be used in the context of an OpAdaptor.
   ///
   /// Pattern constraints have the form:
   ///
   ///   LogicalResult(PatternRewriter &rewriter, Operation *op, Attribute attr,
   ///                 StringRef failureStr);
   ///
-  Optional<StringRef> getAttrConstraintFn(const Constraint &constraint) const;
+  std::optional<StringRef>
+  getAttrConstraintFn(const Constraint &constraint) const;
 
   /// Get the name of the static function used for the given successor
   /// constraint. These functions are in the form:
@@ -216,26 +218,28 @@ private:
 std::string escapeString(StringRef value);
 
 namespace detail {
-template <typename> struct stringifier {
-  template <typename T> static std::string apply(T &&t) {
+template <typename>
+struct stringifier {
+  template <typename T>
+  static std::string apply(T &&t) {
     return std::string(std::forward<T>(t));
   }
 };
-template <> struct stringifier<Twine> {
-  static std::string apply(const Twine &twine) {
-    return twine.str();
-  }
+template <>
+struct stringifier<Twine> {
+  static std::string apply(const Twine &twine) { return twine.str(); }
 };
 template <typename OptionalT>
-struct stringifier<Optional<OptionalT>> {
-  static std::string apply(Optional<OptionalT> optional) {
+struct stringifier<std::optional<OptionalT>> {
+  static std::string apply(std::optional<OptionalT> optional) {
     return optional ? stringifier<OptionalT>::apply(*optional) : std::string();
   }
 };
 } // namespace detail
 
 /// Generically convert a value to a std::string.
-template <typename T> std::string stringify(T &&t) {
+template <typename T>
+std::string stringify(T &&t) {
   return detail::stringifier<std::remove_reference_t<std::remove_const_t<T>>>::
       apply(std::forward<T>(t));
 }

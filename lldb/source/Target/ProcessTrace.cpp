@@ -50,7 +50,7 @@ ProcessTrace::~ProcessTrace() {
   // make sure all of the broadcaster cleanup goes as planned. If we destruct
   // this class, then Process::~Process() might have problems trying to fully
   // destroy the broadcaster.
-  Finalize();
+  Finalize(true /* destructing */);
 }
 
 void ProcessTrace::DidAttach(ArchSpec &process_arch) {
@@ -63,7 +63,7 @@ void ProcessTrace::DidAttach(ArchSpec &process_arch) {
   SetPrivateState(eStateStopped);
 
   EventSP event_sp;
-  WaitForProcessToStop(llvm::None, &event_sp, true, listener_sp);
+  WaitForProcessToStop(std::nullopt, &event_sp, true, listener_sp);
 
   RestoreProcessEvents();
 

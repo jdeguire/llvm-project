@@ -44,20 +44,20 @@
 ; RUN:     --generate=__dump_jit_debug_objects %s | llvm-objdump --section-headers - | \
 ; RUN:     FileCheck --check-prefix=CHECK_LOAD_ADDR %s
 ;
-; CHECK_LOAD_ADDR-NOT: {{[0-9]*}} .text {{.*}} 0000000000000000 TEXT
+; CHECK_LOAD_ADDR-NOT: {{[0-9]*}} .ltext {{.*}} 0000000000000000 TEXT
 
 target triple = "x86_64-unknown-unknown-elf"
 
 ; Built-in symbol provided by the JIT
-declare void @__dump_jit_debug_objects(i8*)
+declare void @__dump_jit_debug_objects(ptr)
 
 ; Host-process symbol from the GDB JIT interface
 @__jit_debug_descriptor = external global i8, align 1
 
 define i32 @main() !dbg !9 {
   %1 = alloca i32, align 4
-  store i32 0, i32* %1, align 4
-  call void @__dump_jit_debug_objects(i8* @__jit_debug_descriptor), !dbg !13
+  store i32 0, ptr %1, align 4
+  call void @__dump_jit_debug_objects(ptr @__jit_debug_descriptor), !dbg !13
   ret i32 0, !dbg !14
 }
 

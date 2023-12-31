@@ -45,8 +45,8 @@
 
 ; CHECK-NOT: .toc
 
-; CHECK:      .csect .text[PR],2
-; CHECK-NEXT:  .file
+; CHECK:  .file
+; CHECK-NEXT:      .csect ..text..[PR],5
 
 ; CHECK:      .csect .data[RW],5
 ; CHECK-NEXT: .globl  ivar
@@ -208,17 +208,18 @@
 ; SYMS:      Symbols [
 ; SYMS-NEXT:   Symbol {
 ; SYMS-NEXT:     Index: 0
-; SYMS-NEXT:     Name: .file
+; SYMS-NEXT:     Name: <stdin>
 ; SYMS-NEXT:     Value (SymbolTableIndex): 0x0
 ; SYMS-NEXT:     Section: N_DEBUG
-; SYMS-NEXT:     Source Language ID: TB_C (0x0)
-; SYMS-NEXT:     CPU Version ID: 0x0
+; SYMS-NEXT:     Source Language ID: TB_CPLUSPLUS (0x9)
+; SYMS32-NEXT:   CPU Version ID: TCPU_COM (0x3)
+; SYMS64-NEXT:   CPU Version ID: TCPU_PPC64 (0x2)
 ; SYMS-NEXT:     StorageClass: C_FILE (0x67)
 ; SYMS-NEXT:     NumberOfAuxEntries: 0
 ; SYMS-NEXT:   }
 ; SYMS-NEXT:   Symbol {
 ; SYMS-NEXT:     Index: [[#INDX:]]
-; SYMS-NEXT:     Name: .text
+; SYMS-NEXT:     Name:
 ; SYMS-NEXT:     Value (RelocatableAddress): 0x0
 ; SYMS-NEXT:     Section: .text
 ; SYMS-NEXT:     Type: 0x0
@@ -229,7 +230,7 @@
 ; SYMS-NEXT:       SectionLen: 0
 ; SYMS-NEXT:       ParameterHashIndex: 0x0
 ; SYMS-NEXT:       TypeChkSectNum: 0x0
-; SYMS-NEXT:       SymbolAlignmentLog2: 2
+; SYMS-NEXT:       SymbolAlignmentLog2: 5
 ; SYMS-NEXT:       SymbolType: XTY_SD (0x1)
 ; SYMS-NEXT:       StorageMappingClass: XMC_PR (0x0)
 ; SYMS32-NEXT:     StabInfoIndex: 0x0

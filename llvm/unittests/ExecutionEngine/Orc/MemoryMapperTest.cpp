@@ -18,7 +18,7 @@ using namespace llvm::orc::shared;
 namespace {
 
 Expected<ExecutorAddrRange> reserve(MemoryMapper &M, size_t NumBytes) {
-  std::promise<Expected<ExecutorAddrRange>> P;
+  std::promise<MSVCPExpected<ExecutorAddrRange>> P;
   auto F = P.get_future();
   M.reserve(NumBytes, [&](auto R) { P.set_value(std::move(R)); });
   return F.get();
@@ -26,7 +26,7 @@ Expected<ExecutorAddrRange> reserve(MemoryMapper &M, size_t NumBytes) {
 
 Expected<ExecutorAddr> initialize(MemoryMapper &M,
                                   MemoryMapper::AllocInfo &AI) {
-  std::promise<Expected<ExecutorAddr>> P;
+  std::promise<MSVCPExpected<ExecutorAddr>> P;
   auto F = P.get_future();
   M.initialize(AI, [&](auto R) { P.set_value(std::move(R)); });
   return F.get();
@@ -34,14 +34,14 @@ Expected<ExecutorAddr> initialize(MemoryMapper &M,
 
 Error deinitialize(MemoryMapper &M,
                    const std::vector<ExecutorAddr> &Allocations) {
-  std::promise<Error> P;
+  std::promise<MSVCPError> P;
   auto F = P.get_future();
   M.deinitialize(Allocations, [&](auto R) { P.set_value(std::move(R)); });
   return F.get();
 }
 
 Error release(MemoryMapper &M, const std::vector<ExecutorAddr> &Reservations) {
-  std::promise<Error> P;
+  std::promise<MSVCPError> P;
   auto F = P.get_future();
   M.release(Reservations, [&](auto R) { P.set_value(std::move(R)); });
   return F.get();
@@ -66,10 +66,10 @@ TEST(MemoryMapperTest, InitializeDeinitialize) {
   int DeinitializeCounter = 0;
   {
     std::unique_ptr<MemoryMapper> Mapper =
-        std::make_unique<InProcessMemoryMapper>();
+        cantFail(InProcessMemoryMapper::Create());
 
     // We will do two separate allocations
-    auto PageSize = cantFail(sys::Process::getPageSize());
+    auto PageSize = Mapper->getPageSize();
     auto TotalSize = PageSize * 2;
 
     // Reserve address space
@@ -92,7 +92,7 @@ TEST(MemoryMapperTest, InitializeDeinitialize) {
       Seg1.Offset = 0;
       Seg1.ContentSize = HW.size();
       Seg1.ZeroFillSize = PageSize - Seg1.ContentSize;
-      Seg1.Prot = sys::Memory::MF_READ | sys::Memory::MF_WRITE;
+      Seg1.AG = MemProt::Read | MemProt::Write;
 
       Alloc1.MappingBase = Mem1->Start;
       Alloc1.Segments.push_back(Seg1);
@@ -116,7 +116,7 @@ TEST(MemoryMapperTest, InitializeDeinitialize) {
       Seg2.Offset = PageSize;
       Seg2.ContentSize = HW.size();
       Seg2.ZeroFillSize = PageSize - Seg2.ContentSize;
-      Seg2.Prot = sys::Memory::MF_READ | sys::Memory::MF_WRITE;
+      Seg2.AG = MemProt::Read | MemProt::Write;
 
       Alloc2.MappingBase = Mem1->Start;
       Alloc2.Segments.push_back(Seg2);
@@ -168,7 +168,7 @@ TEST(MemoryMapperTest, InitializeDeinitialize) {
         Seg3.Offset = 0;
         Seg3.ContentSize = HW.size();
         Seg3.ZeroFillSize = PageSize - Seg3.ContentSize;
-        Seg3.Prot = sys::Memory::MF_READ | sys::Memory::MF_WRITE;
+        Seg3.AG = MemProt::Read | MemProt::Write;
 
         Alloc3.MappingBase = Mem2->Start;
         Alloc3.Segments.push_back(Seg3);

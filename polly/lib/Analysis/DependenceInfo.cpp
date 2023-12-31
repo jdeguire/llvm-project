@@ -848,6 +848,11 @@ const Dependences &DependenceAnalysis::Result::recomputeDependences(
   return *D[Level];
 }
 
+void DependenceAnalysis::Result::abandonDependences() {
+  for (std::unique_ptr<Dependences> &Deps : D)
+    Deps.release();
+}
+
 DependenceAnalysis::Result
 DependenceAnalysis::run(Scop &S, ScopAnalysisManager &SAM,
                         ScopStandardAnalysisResults &SAR) {
@@ -888,6 +893,11 @@ DependenceInfo::recomputeDependences(Dependences::AnalysisLevel Level) {
   D[Level].reset(new Dependences(S->getSharedIslCtx(), Level));
   D[Level]->calculateDependences(*S);
   return *D[Level];
+}
+
+void DependenceInfo::abandonDependences() {
+  for (std::unique_ptr<Dependences> &Deps : D)
+    Deps.release();
 }
 
 bool DependenceInfo::runOnScop(Scop &ScopVar) {
@@ -940,8 +950,8 @@ public:
   bool runOnScop(Scop &S) override {
     DependenceInfo &P = getAnalysis<DependenceInfo>();
 
-    OS << "Printing analysis '" << P.getPassName() << "' for "
-       << "region: '" << S.getRegion().getNameStr() << "' in function '"
+    OS << "Printing analysis '" << P.getPassName() << "' for " << "region: '"
+       << S.getRegion().getNameStr() << "' in function '"
        << S.getFunction().getName() << "':\n";
     P.printScop(OS, S);
 

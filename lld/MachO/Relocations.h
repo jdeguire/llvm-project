@@ -17,8 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace lld {
-namespace macho {
+namespace lld::macho {
 LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
 class Symbol;
@@ -68,6 +67,8 @@ struct Reloc {
         int64_t addend, llvm::PointerUnion<Symbol *, InputSection *> referent)
       : type(type), pcrel(pcrel), length(length), offset(offset),
         addend(addend), referent(referent) {}
+
+  InputSection *getReferentInputSection() const;
 };
 
 bool validateSymbolRelocation(const Symbol *, const InputSection *,
@@ -114,9 +115,10 @@ inline void writeAddress(uint8_t *loc, uint64_t addr, uint8_t length) {
   }
 }
 
+InputSection *offsetToInputSection(uint64_t *);
+
 extern const RelocAttrs invalidRelocAttrs;
 
-} // namespace macho
-} // namespace lld
+} // namespace lld::Macho
 
 #endif

@@ -56,7 +56,8 @@ bool FormatToken::isSimpleTypeSpecifier() const {
   case tok::kw___ibm128:
   case tok::kw_wchar_t:
   case tok::kw_bool:
-  case tok::kw___underlying_type:
+#define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) case tok::kw___##Trait:
+#include "clang/Basic/TransformTypeTraits.def"
   case tok::annot_typename:
   case tok::kw_char8_t:
   case tok::kw_char16_t:
@@ -74,6 +75,21 @@ bool FormatToken::isTypeOrIdentifier() const {
   return isSimpleTypeSpecifier() || Tok.isOneOf(tok::kw_auto, tok::identifier);
 }
 
+bool FormatToken::isBlockIndentedInitRBrace(const FormatStyle &Style) const {
+  assert(is(tok::r_brace));
+  if (!Style.Cpp11BracedListStyle ||
+      Style.AlignAfterOpenBracket != FormatStyle::BAS_BlockIndent) {
+    return false;
+  }
+  const auto *LBrace = MatchingParen;
+  assert(LBrace && LBrace->is(tok::l_brace));
+  if (LBrace->is(BK_BracedInit))
+    return true;
+  if (LBrace->Previous && LBrace->Previous->is(tok::equal))
+    return true;
+  return false;
+}
+
 bool FormatToken::opensBlockOrBlockTypeList(const FormatStyle &Style) const {
   // C# Does not indent object initialisers as continuations.
   if (is(tok::l_brace) && getBlockKind() == BK_BracedInit && Style.isCSharp())
@@ -84,8 +100,7 @@ bool FormatToken::opensBlockOrBlockTypeList(const FormatStyle &Style) const {
          (is(tok::l_brace) &&
           (getBlockKind() == BK_Block || is(TT_DictLiteral) ||
            (!Style.Cpp11BracedListStyle && NestingLevel == 0))) ||
-         (is(tok::less) && (Style.Language == FormatStyle::LK_Proto ||
-                            Style.Language == FormatStyle::LK_TextProto));
+         (is(tok::less) && Style.isProto());
 }
 
 TokenRole::~TokenRole() {}
@@ -95,7 +110,7 @@ void TokenRole::precomputeFormattingInfos(const FormatToken *Token) {}
 unsigned CommaSeparatedList::formatAfterToken(LineState &State,
                                               ContinuationIndenter *Indenter,
                                               bool DryRun) {
-  if (State.NextToken == nullptr || !State.NextToken->Previous)
+  if (!State.NextToken || !State.NextToken->Previous)
     return 0;
 
   if (Formats.size() == 1)
@@ -264,7 +279,7 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
   // We can never place more than ColumnLimit / 3 items in a row (because of the
   // spaces and the comma).
   unsigned MaxItems = Style.ColumnLimit / 3;
-  std::vector<unsigned> MinSizeInColumn;
+  SmallVector<unsigned> MinSizeInColumn;
   MinSizeInColumn.reserve(MaxItems);
   for (unsigned Columns = 1; Columns <= MaxItems; ++Columns) {
     ColumnFormat Format;
