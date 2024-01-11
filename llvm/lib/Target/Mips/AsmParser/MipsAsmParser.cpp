@@ -1353,7 +1353,7 @@ public:
 
     auto Mask = getSaveRestoreSavedRegs();
     while (Mask) {
-      unsigned RegNo = RegClass.getRegister(findFirstSet(Mask));
+      unsigned RegNo = RegClass.getRegister(llvm::countr_zero(Mask));
       Inst.addOperand(MCOperand::createReg(RegNo));
       Mask &= (Mask - 1);
     }
@@ -1362,7 +1362,7 @@ public:
 
     Mask = getSaveRestoreStaticRegs();
     while (Mask) {
-      unsigned RegNo = RegClass.getRegister(findFirstSet(Mask));
+      unsigned RegNo = RegClass.getRegister(llvm::countr_zero(Mask));
       Inst.addOperand(MCOperand::createReg(RegNo));
       Mask &= (Mask - 1);
     }
@@ -7185,16 +7185,14 @@ ParseStatus MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
     TokEnd = TokStart;
 
     if (Parser.getTok().is(AsmToken::Dollar)) {
-      unsigned RegNo = (unsigned)-1;
-      if (ParseRegister(RegNo, TokStart, TokEnd)) {
-        Error(TokEnd, "expected register operand");
-        return MatchOperand_ParseFail;
+      MCRegister Reg;
+      if (parseRegister(Reg, TokStart, TokEnd)) {
+        return Error(TokEnd, "expected register operand");
       }
 
-      unsigned RegIndex = RegInfo->getEncodingValue(RegNo);
+      unsigned RegIndex = RegInfo->getEncodingValue(Reg);
       if (RegIndex > 31) {
-        Error(TokEnd, "invalid register operand");
-        return MatchOperand_ParseFail;
+        return Error(TokEnd, "invalid register operand");
       }
 
       if (IsRange) {
@@ -7218,26 +7216,22 @@ ParseStatus MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
       // presumably the frame size. Any args after the frame size are
       // static registers.
       if (FramesizeSet) {
-        Error(TokEnd, "expected static register");
-        return ParseStatus::Failure;
+        return Error(TokEnd, "expected static register");
       }
 
       const MCExpr *FramesizeExpr;
       if (Parser.parseExpression(FramesizeExpr, TokEnd)) {
-        Error(TokEnd, "expected frame size value");
-        return ParseStatus::Failure;
+        return Error(TokEnd, "expected frame size value");
       }
 
       const MCConstantExpr *MCE = dyn_cast<MCConstantExpr>(FramesizeExpr);
       if (nullptr == MCE) {
-        Error(TokEnd, "frame size not an absolute expression");
-        return ParseStatus::Failure;
+        return Error(TokEnd, "frame size not an absolute expression");
       }
 
       int64_t FramesizeVal = MCE->getValue();
       if (FramesizeVal > 2040 || FramesizeVal < 0 || FramesizeVal & 0x07) {
-        Error(TokEnd, "frame size must be in range 0 .. 2040 and a multiple of 8");
-        return ParseStatus::Failure;
+        return Error(TokEnd, "frame size must be in range 0 .. 2040 and a multiple of 8");
       }
 
       RegMaskPtr = &StaticRegMask;
@@ -7248,31 +7242,26 @@ ParseStatus MipsAsmParser::parseSaveRestoreOperands(OperandVector &Operands) {
     if (!IsRange) {
       if (Parser.getTok().isNot(AsmToken::EndOfStatement) && 
           Parser.getTok().isNot(AsmToken::Comma)) {
-        Error(Parser.getTok().getLoc(), "unexpected token, expected comma");
-        return ParseStatus::Failure;
+        return Error(Parser.getTok().getLoc(), "unexpected token, expected comma");
       }
 
       if (Parser.getTok().is(AsmToken::Comma))
         Lex();     // eat comma
     } else if (Parser.getTok().isNot(AsmToken::Dollar)) {
-      Error(Parser.getTok().getLoc(), "expected end of register range");
-      return ParseStatus::Failure;
+      return Error(Parser.getTok().getLoc(), "expected end of register range");
     }
   }
 
   TokEnd = Parser.getTok().getLoc();
 
   if (SavedRegMask & ~0xC0FF00F0) {
-    Error(TokEnd, "only registers $4-7, $16-23, $30, and $31 can be used");
-    return ParseStatus::Failure;
+    return Error(TokEnd, "only registers $4-7, $16-23, $30, and $31 can be used");
   }
   if (StaticRegMask & ~0xF0) {
-    Error(TokEnd, "only registers $4-7 can be saved as static registers");
-    return ParseStatus::Failure;
+    return Error(TokEnd, "only registers $4-7 can be saved as static registers");
   }
   if (SavedRegMask & StaticRegMask) {
-    Error(TokEnd, "registers cannot be both in saved and static lists");
-    return ParseStatus::Failure;
+    return Error(TokEnd, "registers cannot be both in saved and static lists");
   }
 
   Operands.push_back(

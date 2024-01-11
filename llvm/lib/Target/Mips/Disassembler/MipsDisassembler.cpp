@@ -38,12 +38,14 @@ using DecodeStatus = MCDisassembler::DecodeStatus;
 namespace {
 
 class MipsDisassembler : public MCDisassembler {
+  bool IsMips16;
   bool IsMicroMips;
   bool IsBigEndian;
 
 public:
   MipsDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx, bool IsBigEndian)
       : MCDisassembler(STI, Ctx),
+        IsMips16(STI.hasFeature(Mips::FeatureMips16)),
         IsMicroMips(STI.hasFeature(Mips::FeatureMicroMips)),
         IsBigEndian(IsBigEndian) {}
 
@@ -247,7 +249,7 @@ static DecodeStatus DecodeBranchTarget16Mips16(MCInst &Inst, unsigned Offset,
 
 // DecodeJumpTargetMips16 - Decode MIPS16 jump target, which is
 // shifted left by 2 bits.
-static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Insn,
+static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Value,
                                            uint64_t Address,
                                            const MCDisassembler *Decoder);
 
@@ -268,6 +270,20 @@ static DecodeStatus DecodeMem(MCInst &Inst, unsigned Insn, uint64_t Address,
 
 static DecodeStatus DecodeMemEVA(MCInst &Inst, unsigned Insn, uint64_t Address,
                                  const MCDisassembler *Decoder);
+
+template<int ShiftAmount>
+static DecodeStatus DecodeMemMips16(MCInst &Inst, unsigned Value,
+                                    uint64_t Address,
+                                    const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeMemSprelMips16(MCInst &Inst, unsigned Value,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder);
+
+template<int ShiftAmount>
+static DecodeStatus DecodeMemPcrelMips16(MCInst &Inst, unsigned Value,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder);
 
 static DecodeStatus DecodeLoadByte15(MCInst &Inst, unsigned Insn,
                                      uint64_t Address,
@@ -510,9 +526,9 @@ static DecodeStatus DecodeMovePOperands(MCInst &Inst, unsigned Insn,
                                         uint64_t Address,
                                         const MCDisassembler *Decoder);
 
-static DecodeStatus DecodeFIXMEInstruction(MCInst &Inst, unsigned Insn,
-                                           uint64_t Address,
-                                           const MCDisassembler *Decoder);
+static DecodeStatus DecodeSaveRestore(MCInst &Inst, unsigned Value,
+                                      uint64_t Address,
+                                      const MCDisassembler *Decoder);
 
 static MCDisassembler *createMipsDisassembler(
                        const Target &T,
@@ -1147,10 +1163,11 @@ static DecodeStatus readInstruction16(ArrayRef<uint8_t> Bytes, uint64_t Address,
 }
 
 /// Read four bytes from the ArrayRef and return 32 bit word sorted
-/// according to the given endianness.
+/// according to the given endianness and whether this is a compressed
+/// ISA (MIPS16 or microMIPS).
 static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
                                       uint64_t &Size, uint32_t &Insn,
-                                      bool IsBigEndian, bool IsMicroMips) {
+                                      bool IsBigEndian, bool IsCompressed) {
   // We want to read exactly 4 Bytes of data.
   if (Bytes.size() < 4) {
     Size = 0;
@@ -1159,9 +1176,10 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
 
   // High 16 bits of a 32-bit microMIPS instruction (where the opcode is)
   // always precede the low 16 bits in the instruction stream (that is, they
-  // are placed at lower addresses in the instruction stream).
+  // are placed at lower addresses in the instruction stream). MIPS16 is
+  // similar in that the EXTEND portion is always first in 32-bit instructions.
   //
-  // microMIPS byte ordering:
+  // microMIPS/MIPS16 byte ordering:
   //   Big-endian:    0 | 1 | 2 | 3
   //   Little-endian: 1 | 0 | 3 | 2
 
@@ -1170,7 +1188,7 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
     Insn =
         (Bytes[3] << 0) | (Bytes[2] << 8) | (Bytes[1] << 16) | (Bytes[0] << 24);
   } else {
-    if (IsMicroMips) {
+    if (IsCompressed) {
       Insn = (Bytes[2] << 0) | (Bytes[3] << 8) | (Bytes[0] << 16) |
              (Bytes[1] << 24);
     } else {
@@ -1189,6 +1207,44 @@ DecodeStatus MipsDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
   uint32_t Insn;
   DecodeStatus Result;
   Size = 0;
+
+  if (IsMips16) {
+    Result = readInstruction16(Bytes, Address, Size, Insn, IsBigEndian);
+    if (Result == MCDisassembler::Fail)
+      return MCDisassembler::Fail;
+
+    LLVM_DEBUG(dbgs() << "Trying Mips16 table (16-bit instructions):\n");
+    // Calling the auto-generated decoder function for MIPS16 16-bit
+    // instructions.
+    Result = decodeInstruction(DecoderTableMips1616, Instr, Insn, Address,
+                               this, STI);
+    if (Result != MCDisassembler::Fail) {
+      Size = 2;
+      return Result;
+    }
+
+    Result = readInstruction32(Bytes, Address, Size, Insn, IsBigEndian, true);
+    if (Result == MCDisassembler::Fail)
+      return MCDisassembler::Fail;
+
+    LLVM_DEBUG(dbgs() << "Trying Mips16 table (32-bit instructions):\n");
+    // Calling the auto-generated decoder function for MIPS16 extended
+    // instructions.
+    Result = decodeInstruction(DecoderTableMips1632, Instr, Insn, Address,
+                               this, STI);
+    if (Result != MCDisassembler::Fail) {
+      Size = 4;
+      return Result;
+    }
+
+    // This is an invalid instruction. Claim that the Size is 2 bytes. Since
+    // MIPS16 instructions have a minimum alignment of 2, the next 2 bytes
+    // could form a valid instruction. The two bytes we rejected as an
+    // instruction could have actually beeen an inline constant pool that is
+    // unconditionally branched over.
+    Size = 2;
+    return MCDisassembler::Fail;
+  }
 
   if (IsMicroMips) {
     Result = readInstruction16(Bytes, Address, Size, Insn, IsBigEndian);
@@ -1519,6 +1575,41 @@ static DecodeStatus DecodeMemEVA(MCInst &Inst, unsigned Insn, uint64_t Address,
   Inst.addOperand(MCOperand::createReg(Base));
   Inst.addOperand(MCOperand::createImm(Offset));
 
+  return MCDisassembler::Success;
+}
+
+template<int ShiftAmount>
+static DecodeStatus DecodeMemMips16(MCInst &Inst, unsigned Value,
+                                    uint64_t Address,
+                                    const MCDisassembler *Decoder) {
+  // Value is encoded as ((reg << 16) | offset). 
+  // See MipsMCCodeEmitter::getMemEncoding().            
+  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, (Value >> 16) & 0x07);
+  int Offset = SignExtend32<16>((Value & 0xFFFF) << ShiftAmount);
+
+  Inst.addOperand(MCOperand::createReg(Reg));
+  Inst.addOperand(MCOperand::createImm(Offset));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeMemSprelMips16(MCInst &Inst, unsigned Value,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder) {
+  int Offset = SignExtend32<16>(Value & 0xFFFF);
+
+  Inst.addOperand(MCOperand::createReg(Mips::SP));
+  Inst.addOperand(MCOperand::createImm(Offset));
+  return MCDisassembler::Success;
+}
+
+template<int ShiftAmount>
+static DecodeStatus DecodeMemPcrelMips16(MCInst &Inst, unsigned Value,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder) {
+  int Offset = SignExtend32<16>((Value & 0xFFFF) << ShiftAmount);
+
+  Inst.addOperand(MCOperand::createReg(Mips::PC));
+  Inst.addOperand(MCOperand::createImm(Offset));
   return MCDisassembler::Success;
 }
 
@@ -2232,10 +2323,10 @@ static DecodeStatus DecodeBranchTarget16Mips16(MCInst &Inst, unsigned Offset,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Insn,
+static DecodeStatus DecodeJumpTargetMips16(MCInst &Inst, unsigned Value,
                                            uint64_t Address,
                                            const MCDisassembler *Decoder) {
-  unsigned JumpOffset = fieldFromInstruction(Insn, 0, 26) << 2;
+  unsigned JumpOffset = Value << 2;
   Inst.addOperand(MCOperand::createImm(JumpOffset));
   return MCDisassembler::Success;
 }
@@ -2574,11 +2665,84 @@ static DecodeStatus DecodeBlezGroupBranchMMR6(MCInst &MI, InsnType insn,
   return MCDisassembler::Success;
 }
 
-// This instruction does not have a working decoder, and needs to be
-// fixed. This "fixme" function was introduced to keep the backend compiling,
-// while making changes to tablegen code.
-static DecodeStatus DecodeFIXMEInstruction(MCInst &Inst, unsigned Insn,
-                                           uint64_t Address,
-                                           const MCDisassembler *Decoder) {
-  return MCDisassembler::Fail;
+static DecodeStatus DecodeSaveRestore(MCInst &Inst, unsigned Value,
+                                      uint64_t Address,
+                                      const MCDisassembler *Decoder) {
+  // This is for the MIPS16 SAVE and RESTORE instructions, which are weird.
+  // See MipsMCCodeEmitter::getSaveRestoreEncoding() for how this was derived.
+  union {
+    struct {
+      unsigned framesize:8;
+      unsigned s1:1;
+      unsigned s0:1;
+      unsigned ra:1;
+      unsigned aregs:4;
+      unsigned xsregs:3;
+    } bits;
+    unsigned val;
+  } Encoding;
+
+  Encoding.val = Value;
+
+  if(Encoding.bits.aregs == 15) {
+    // This is undefined.
+    return MCDisassembler::SoftFail;
+  }
+
+  unsigned SavedRegs = 0;
+  unsigned StaticRegs = 0;
+  unsigned FrameSize = Encoding.bits.framesize << 3;
+
+  if (Encoding.bits.s0)       // Is $16 saved?
+    SavedRegs |= (1 << 16);
+  if (Encoding.bits.s1)       // Is $17 saved?
+    SavedRegs |= (1 << 17);
+  if (Encoding.bits.ra)       // Is $31 saved?
+    SavedRegs |= (1 << 31);
+
+  if (Inst.getOpcode() == Mips::SaveX16 || Inst.getOpcode() == Mips::RestoreX16) {
+    // 'xsregs' indicates which regs in [$18-$23, $30] are saved.
+    unsigned XsregsMask[8] = {0x00000000, 0x00040000, 0x000C0000, 0x001C0000,
+                              0x003C0000, 0x007C0000, 0x00FC0000, 0x40FC0000};
+    SavedRegs |= XsregsMask[Encoding.bits.xsregs];
+
+    // 'aregs' indicates which argument registers are saved and, if so,
+    // if they're caller- or callee-saved (static regs).
+    unsigned AregsStaticsMask[16] = {0x00, 0x80, 0xC0, 0xE0, 0x00, 0x80,
+                                     0xC0, 0xE0, 0x00, 0x80, 0xC0, 0xF0,
+                                     0x00, 0x80, 0x00, 0x00};
+    StaticRegs = AregsStaticsMask[Encoding.bits.aregs];
+
+    if (Inst.getOpcode() == Mips::SaveX16) {
+      // This applies only to SAVE because RESTORE does not restore these.
+      unsigned AregsSavedMask[16] = {0x00, 0x00, 0x00, 0x00, 0x10, 0x10,
+                                     0x10, 0x10, 0x30, 0x30, 0x30, 0x00,
+                                     0x70, 0x70, 0xF0, 0x00};
+      SavedRegs |= AregsSavedMask[Encoding.bits.aregs];
+    }
+
+  } else {
+    // The 16-bit versions interpret an encoded frame size of 0 as 128 bytes.
+    if (FrameSize == 0)
+      FrameSize = 128;
+  }
+
+
+  while (SavedRegs) {
+    unsigned RegNo = llvm::countr_zero(SavedRegs);
+    unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+    Inst.addOperand(MCOperand::createReg(Reg));
+    SavedRegs &= (SavedRegs - 1);
+  }
+
+  Inst.addOperand(MCOperand::createImm(FrameSize));
+
+  while (StaticRegs) {
+    unsigned RegNo = llvm::countr_zero(StaticRegs);
+    unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+    Inst.addOperand(MCOperand::createReg(Reg));
+    StaticRegs &= (StaticRegs - 1);
+  }
+
+  return MCDisassembler::Success;
 }

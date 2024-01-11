@@ -117,7 +117,7 @@ void MipsMCCodeEmitter::LowerCompactBranch(MCInst& Inst) const {
 }
 
 bool MipsMCCodeEmitter::isMips16(const MCSubtargetInfo &STI) const {
-  return STI.getFeatureBits()[Mips::FeatureMips16];
+  return STI.hasFeature(Mips::FeatureMips16);
 }
 
 bool MipsMCCodeEmitter::isMicroMips(const MCSubtargetInfo &STI) const {

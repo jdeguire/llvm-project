@@ -20,6 +20,8 @@ def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 // registers but are not encoded as normal operands. Instead, they determine
 // the opcode to use and so could be considered part of the mnemonic. These
 // define "pseudo register" operands to handle such instructions.
+// TODO: Should I change how the Operand ones (__PseudoReg) are capitalized to
+//       match other operands?
 def Mips16PCPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16PCPseudoReg";
   let PredicateMethod = "isPCPseudoReg";
@@ -59,6 +61,7 @@ def ptr_cpu16_rc : PointerLikeRegClass<4>;
 // TODO: This could possibly be modeled after MipsMemSimmAsmOperand in MipsInstrInfo.td.
 // TODO: Do we really need separate operand classes for short vs extended instructions?
 // TODO: These predicate methods will probably need updating for width and shift values.
+// TODO: Reorganize these so that matchers are next to operands like above.
 
 class Mips16ExtMemAsmOperandBase : AsmOperandClass {
   let Name = "Mips16ExtMemBase";
@@ -121,32 +124,28 @@ def Mips16SpRelMemAsmOperand : Mips16MemAsmOperandBase {
 }
 
 
-// TODO: These memory operands do not appear to get encoded into the instruction. Why is that?
-//       Can the operands in MIOperandInfo be named?
 // TODO: Do these need custom PrintMethod values? The base mem_generic class provides one already.
-// TODO: These will probably need custom encoder methods to get the data from the memory operand.
-// TODO: The EncoderMethod "getMemEncoding" is templated on the shift amount. This will likely be
-//       needed for short instructions. We might need one specific to MIPS16 EXT instructions.
-// TODO: Will these need custom DecoderMethod values? It can probably also be templated on a shift
-//       amount for short instructions.
 
 // mem_generic is found in MipsInstrInfo.td.
 def mem16_lsl0 : mem_generic {
   let ParserMatchClass = Mips16MemAsmOperandLsl0;
   let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
 //  let EncoderMethod = "getMemEncoding<0>";
+  let DecoderMethod = "DecodeMemMips16<0>";
 }
 
 def mem16_lsl1 : mem_generic {
   let ParserMatchClass = Mips16MemAsmOperandLsl1;
   let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
   let EncoderMethod = "getMemEncoding<1>";
+  let DecoderMethod = "DecodeMemMips16<1>";
 }
 
 def mem16_lsl2 : mem_generic {
   let ParserMatchClass = Mips16MemAsmOperandLsl2;
   let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
   let EncoderMethod = "getMemEncoding<2>";
+  let DecoderMethod = "DecodeMemMips16<2>";
 }
 
 // Like mem16_lsl2, but the "$pc" pseudo-register is used as the offset base register.
@@ -154,6 +153,7 @@ def mem16_pc : mem_generic {
   let ParserMatchClass = Mips16PcRelMemAsmOperand;
   let MIOperandInfo = (ops PCPseudoReg, uimm8);
   let EncoderMethod = "getMemEncoding<2>";
+  let DecoderMethod = "DecodeMemPcrelMips16<2>";
 }
 
 // Like mem16_lsl2, but the "$sp" pseudo-register is used as the offset base register.
@@ -161,23 +161,27 @@ def mem16_sp : mem_generic {
   let ParserMatchClass = Mips16SpRelMemAsmOperand;
   let MIOperandInfo = (ops SPPseudoReg, uimm8);
   let EncoderMethod = "getMemEncoding<2>";
+  let DecoderMethod = "DecodeMemSprelMips16";
 }
 
 def mem16ext : mem_generic {
   let ParserMatchClass = Mips16ExtMemAsmOperand;
   let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
+  let DecoderMethod = "DecodeMemMips16<0>";
 }
 
 // Like mem16ext, but the "$pc" pseudo-register is used as the offset base register.
 def mem16ext_pc : mem_generic {
   let ParserMatchClass = Mips16ExtPcRelMemAsmOperand;
   let MIOperandInfo = (ops PCPseudoReg, simm16);
+  let DecoderMethod = "DecodeMemPcrelMips16<0>";
 }
 
 // Like mem16ext, but the "$sp" pseudo-register is used as the offset base register.
 def mem16ext_sp : mem_generic {
   let ParserMatchClass = Mips16ExtSpRelMemAsmOperand;
   let MIOperandInfo = (ops SPPseudoReg, simm16);
+  let DecoderMethod = "DecodeMemSprelMips16";
 }
 
 
@@ -191,6 +195,7 @@ class SaveRestoreOperandsBase : AsmOperandClass {
 class svrsBase : Operand<i32> {
   let PrintMethod = "printSaveRestore";
   let EncoderMethod = "getSaveRestoreEncoding";
+  let DecoderMethod = "DecodeSaveRestore";
 }
 
 def SaveRestoreOperands : SaveRestoreOperandsBase {
@@ -372,6 +377,9 @@ class FRI16R_ins<bits<5> op, string asmstr, InstrItinClass itin>:
 class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm),
         !strconcat(asmstr, "\t$rx, $imm"), [], itin> {
+  bits<16> imm;
+  let imm8 = imm{7-0};
+
   let Constraints = "$rx_ = $rx";
 }
 
@@ -450,8 +458,8 @@ class FEXT_CCRXI16_ins<string asmstr>:
 //
 class FJAL16_codegen_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
-  FJAL16<_X, (outs), (ins uimm26:$imm),
-         !strconcat(asmstr, "\t$imm\n\tnop"),[],
+  FJAL16<_X, (outs), (ins uimm26:$imm26),
+         !strconcat(asmstr, "\t$imm26\n\tnop"),[],
          itin>  {
   let isCodeGenOnly=1;
   let Size=6;
@@ -459,8 +467,8 @@ class FJAL16_codegen_ins<bits<1> _X, string asmstr,
 
 class FJALB16_codegen_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
-  FJAL16<_X, (outs), (ins uimm26:$imm),
-         !strconcat(asmstr, "\t$imm\t# branch\n\tnop"),[],
+  FJAL16<_X, (outs), (ins uimm26:$imm26),
+         !strconcat(asmstr, "\t$imm26\t# branch\n\tnop"),[],
          itin>  {
   let isCodeGenOnly=1;
   let Size=6;
@@ -582,6 +590,7 @@ class FEXT_2RI16_ins<bits<5> _op, string asmstr,
 //
 
 // TODO: Can I remove FEXT_RI16_mem and use FEXT_RI16 instead by using "let" to set "imm16" to the offset in "addr"?
+//       Doing so might require decoders to be defined for these instructions instead of the operands, which seems silly.
 class FEXT_RI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FEXT_RI16_mem<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
@@ -597,6 +606,7 @@ class FEXT_RI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
 //
 
 // TODO: Can I remove FEXT_RRI16_mem and use FEXT_RRI16 instead by using "let" to set "imm16" and "rx" to the offset and reg in "addr"?
+//       Doing so might require decoders to be defined for these instructions instead of the operands, which seems silly.
 class FEXT_RRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
   FEXT_RRI16_mem<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
@@ -619,7 +629,12 @@ class FEXT_RRI_A16_ins<bits<1> op, string asmstr, InstrItinClass itin>:
 class FEXT_RRI_A16_mem_ins<bits<1> op, string asmstr, Operand MemOpnd,
                            InstrItinClass itin>:
   FEXT_RRI_A16<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
-               !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
+               !strconcat(asmstr, "\t$ry, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  bits<19> addr;
+  let imm15 = addr{14-0};
+  let rx = addr{18-16};
+}
 
 //
 // EXT-SHIFT instruction format
@@ -658,8 +673,8 @@ class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
 // I8_MOVR32 instruction format (used only by the MOVR32 instructio
 //
 class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
-       FI8_MOVR3216<(outs CPU16Opnd:$rz), (ins GPR32Opnd:$r32),
-       !strconcat(asmstr,  "\t$rz, $r32"), [], itin>;
+       FI8_MOVR3216<(outs CPU16Opnd:$ry), (ins GPR32Opnd:$r32),
+       !strconcat(asmstr,  "\t$ry, $r32"), [], itin>;
 
 //
 // I8_MOV32R instruction format (used only by MOV32R instruction)
@@ -1800,8 +1815,10 @@ def SltiuRxImm16: FRI16R_ins<0b01011, "sltiu", IIM16Alu> {
 // Purpose: Set on Less Than Immediate Unsigned (Extended)
 // To record the result of a less-than comparison with a constant.
 //
-//
-def SltiuRxImmX16: FEXT_RI16R_ins<0b01011, "sltiu", uimm16_relaxed, IIM16Alu> {
+// This sign-extends the immediate operand, but treats both operands
+// as unsigned for the comparison. Allow a "relaxed" operand since,
+// for example, -1 and 65535 would yield the same result. 
+def SltiuRxImmX16: FEXT_RI16R_ins<0b01011, "sltiu", simm16_relaxed, IIM16Alu> {
   let Defs = [T8];
 }
 //

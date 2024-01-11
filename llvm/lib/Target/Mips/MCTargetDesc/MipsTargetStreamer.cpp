@@ -37,7 +37,7 @@ static cl::opt<bool> RoundSectionSizes(
 } // end anonymous namespace
 
 static bool isMips16(const MCSubtargetInfo *STI) {
-  return STI->getFeatureBits()[Mips::FeatureMips16];
+  return STI->hasFeature(Mips::FeatureMips16);
 }
 
 static bool isMicroMips(const MCSubtargetInfo *STI) {
