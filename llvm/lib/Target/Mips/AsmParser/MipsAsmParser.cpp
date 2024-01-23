@@ -2611,6 +2611,7 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
 
   // We know we emitted an instruction on the MER_NotAMacro or MER_Success path.
   // If we're in microMIPS mode then we must also set EF_MIPS_MICROMIPS.
+#warning TODO: Do something like this for MIPS16?
   if (inMicroMipsMode()) {
     TOut.setUsesMicroMips();
     TOut.updateABIInfo(*this);

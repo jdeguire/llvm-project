@@ -161,7 +161,7 @@ def mem16_sp : mem_generic {
   let ParserMatchClass = Mips16SpRelMemAsmOperand;
   let MIOperandInfo = (ops SPPseudoReg, uimm8);
   let EncoderMethod = "getMemEncoding<2>";
-  let DecoderMethod = "DecodeMemSprelMips16";
+  let DecoderMethod = "DecodeMemSprelMips16<2>";
 }
 
 def mem16ext : mem_generic {
@@ -181,7 +181,7 @@ def mem16ext_pc : mem_generic {
 def mem16ext_sp : mem_generic {
   let ParserMatchClass = Mips16ExtSpRelMemAsmOperand;
   let MIOperandInfo = (ops SPPseudoReg, simm16);
-  let DecoderMethod = "DecodeMemSprelMips16";
+  let DecoderMethod = "DecodeMemSprelMips16<0>";
 }
 
 
@@ -957,27 +957,29 @@ def AddiuRxRyOffMemX16:
 // Purpose: Add Immediate Unsigned Word (3-Operand, PC-Relative)
 // To add a constant to the program counter.
 //
-def AddiuRxPcImm16:
-  FRI16_PC_ins<0b00001, "addiu", uimm8_lsl2, IIM16Alu>;
+def AddiuRxPcImm16: FRI16_PC_ins<0b00001, "addiu", uimm8_lsl2, IIM16Alu> {
+  let DecoderMethod = "DecodeAddiuRxPcMips16";
+}
 
-def AddiuRxPcImmX16:
-  FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu>;
+def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu> {
+  let DecoderMethod = "DecodeAddiuRxPcMips16";
+}
 
 
 // Format: ADDIU rx, sp, immediate MIPS16e
 // Purpose: Add Immediate Unsigned Word (3-Operand, SP-Relative)
 // To add a constant to the stack pointer.
 //
-def AddiuRxSpImm16:
-  FRI16_SP_ins<0b00000, "addiu", uimm8_lsl2, IIM16Alu> {
-    let Defs = [SP];
-    let Uses = [SP];
+def AddiuRxSpImm16: FRI16_SP_ins<0b00000, "addiu", uimm8_lsl2, IIM16Alu> {
+  let Defs = [SP];
+  let Uses = [SP];
+  let DecoderMethod = "DecodeAddiuRxSpMips16";
 }
 
-def AddiuRxSpImmX16:
-  FEXT_RI16_SP_ins<0b00000, "addiu", IIM16Alu> {
-    let Defs = [SP];
-    let Uses = [SP];
+def AddiuRxSpImmX16: FEXT_RI16_SP_ins<0b00000, "addiu", IIM16Alu> {
+  let Defs = [SP];
+  let Uses = [SP];
+  let DecoderMethod = "DecodeAddiuRxSpMips16";
 }
 
 
@@ -986,17 +988,17 @@ def AddiuRxSpImmX16:
 // Purpose: Add Immediate Unsigned Word (2-Operand, SP-Relative, Extended)
 // To add a constant to the stack pointer.
 //
-def AddiuSpImm16
-  : FI816_SP_ins<0b011, "addiu", IIM16Alu> {
+def AddiuSpImm16 : FI816_SP_ins<0b011, "addiu", IIM16Alu> {
   let Defs = [SP];
   let Uses = [SP];
   let AddedComplexity = 5;
+  let DecoderMethod = "DecodeAddiuSpMips16";
 }
 
-def AddiuSpImmX16
-  : FEXT_I816_SP_ins<0b011, "addiu", IIM16Alu> {
+def AddiuSpImmX16 : FEXT_I816_SP_ins<0b011, "addiu", IIM16Alu> {
   let Defs = [SP];
   let Uses = [SP];
+  let DecoderMethod = "DecodeAddiuSpMips16";
 }
 
 //
@@ -1224,23 +1226,25 @@ def Jalx16 : FJAL16_ins<1, "jalx", IIM16Alu> {
 // a register.
 //
 def JalrRaRx16: FRR16_JALRC_RaRx_ins<0, "jalr", IIM16Alu> {
-  let isBranch = 1;
-  let isIndirectBranch = 1;
+  let isBranch = 0;
+  let isIndirectBranch = 0;
   let hasDelaySlot = 1;
   let isCall = 1;
   let isTerminator = 1;
   let isBarrier = 1;
   let Defs = [RA];
+  let DecoderMethod = "DecodeJalrRaRxMips16";
 }
 
 def JalrcRaRx16: FRR16_JALRC_RaRx_ins<1, "jalrc", IIM16Alu> {
-  let isBranch = 1;
-  let isIndirectBranch = 1;
+  let isBranch = 0;
+  let isIndirectBranch = 0;
   let hasDelaySlot = 0;
   let isCall = 1;
   let isTerminator = 1;
   let isBarrier = 1;
   let Defs = [RA];
+  let DecoderMethod = "DecodeJalrRaRxMips16";
 }
 
 //
@@ -1250,23 +1254,25 @@ def JalrcRaRx16: FRR16_JALRC_RaRx_ins<1, "jalrc", IIM16Alu> {
 // address register.
 //
 def JrRa16: FRR16_JALRC_RA_only_ins<0, "jr", IIM16Alu> {
-  let isBranch = 1;
-  let isIndirectBranch = 1;
+  let isBranch = 0;
+  let isIndirectBranch = 0;
   let hasDelaySlot = 1;
   let isTerminator=1;
   let isBarrier = 1;
   let isReturn = 1;
   let Uses = [RA];
+  let DecoderMethod = "DecodeJrRaMips16";
 }
 
 def JrcRa16: FRR16_JALRC_RA_only_ins<1, "jrc", IIM16Alu> {
-  let isBranch = 1;
-  let isIndirectBranch = 1;
+  let isBranch = 0;
+  let isIndirectBranch = 0;
   let hasDelaySlot = 0;
   let isTerminator=1;
   let isBarrier=1;
   let isReturn=1;
   let Uses = [RA];
+  let DecoderMethod = "DecodeJrRaMips16";
 }
 
 //
@@ -1949,6 +1955,7 @@ def SwRxSpImmX16: FEXT_RI16_memstore_ins<0b11010, "sw", mem16ext_sp, II_SW>, May
 //
 def SwRaSpImm16: FI816_RA_mem_ins<0b010, "sw", mem16_sp, II_SW>, MayStore {
   let Uses = [RA, SP];
+  let DecoderMethod = "DecodeSwRaSpMips16";
 }
 
 //
@@ -1958,6 +1965,7 @@ def SwRaSpImm16: FI816_RA_mem_ins<0b010, "sw", mem16_sp, II_SW>, MayStore {
 //
 def SwRaSpImmX16: FEXT_I816_RA_mem_ins<0b010, "sw", mem16ext_sp, II_SW>, MayStore {
   let Uses = [RA, SP];
+  let DecoderMethod = "DecodeSwRaSpMips16";
 }
 
 //

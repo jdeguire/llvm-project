@@ -276,6 +276,7 @@ static DecodeStatus DecodeMemMips16(MCInst &Inst, unsigned Value,
                                     uint64_t Address,
                                     const MCDisassembler *Decoder);
 
+template<int ShiftAmount>
 static DecodeStatus DecodeMemSprelMips16(MCInst &Inst, unsigned Value,
                                          uint64_t Address,
                                          const MCDisassembler *Decoder);
@@ -529,6 +530,30 @@ static DecodeStatus DecodeMovePOperands(MCInst &Inst, unsigned Insn,
 static DecodeStatus DecodeSaveRestore(MCInst &Inst, unsigned Value,
                                       uint64_t Address,
                                       const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeAddiuRxSpMips16(MCInst &Inst, unsigned Insn,
+                                          uint64_t Address,
+                                          const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeAddiuRxPcMips16(MCInst &Inst, unsigned Insn,
+                                          uint64_t Address,
+                                          const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeAddiuSpMips16(MCInst &Inst, unsigned Insn,
+                                        uint64_t Address,
+                                        const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeJalrRaRxMips16(MCInst &Inst, unsigned Insn,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeJrRaMips16(MCInst &Inst, unsigned Insn,
+                                     uint64_t Address,
+                                     const MCDisassembler *Decoder);
+
+static DecodeStatus DecodeSwRaSpMips16(MCInst &Inst, unsigned Insn,
+                                       uint64_t Address,
+                                       const MCDisassembler *Decoder);
 
 static MCDisassembler *createMipsDisassembler(
                        const Target &T,
@@ -1592,10 +1617,11 @@ static DecodeStatus DecodeMemMips16(MCInst &Inst, unsigned Value,
   return MCDisassembler::Success;
 }
 
+template<int ShiftAmount>
 static DecodeStatus DecodeMemSprelMips16(MCInst &Inst, unsigned Value,
                                          uint64_t Address,
                                          const MCDisassembler *Decoder) {
-  int Offset = SignExtend32<16>(Value & 0xFFFF);
+  int Offset = SignExtend32<16>((Value & 0xFFFF) << ShiftAmount);
 
   Inst.addOperand(MCOperand::createReg(Mips::SP));
   Inst.addOperand(MCOperand::createImm(Offset));
@@ -2745,4 +2771,113 @@ static DecodeStatus DecodeSaveRestore(MCInst &Inst, unsigned Value,
   }
 
   return MCDisassembler::Success;
+}
+
+
+static bool InstructionIsMips16Extended(unsigned Insn)
+{
+  return (Insn & 0xF8000000) == 0xF0000000;
+}
+
+static DecodeStatus DecodeAddiuRxSpMips16(MCInst &Inst, unsigned Insn,
+                                          uint64_t Address,
+                                          const MCDisassembler *Decoder) {
+  unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
+  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+  unsigned Imm;
+
+  Inst.addOperand(MCOperand::createReg(Reg));
+  Inst.addOperand(MCOperand::createReg(Mips::SP));
+
+  if (InstructionIsMips16Extended(Insn)) {
+    Imm = fieldFromInstruction(Insn, 0, 5);
+    Imm |= fieldFromInstruction(Insn, 21, 6) << 5;
+    Imm |= fieldFromInstruction(Insn, 16, 5) << 11;
+    Inst.addOperand(MCOperand::createImm(SignExtend32<16>(Imm)));
+  } else {
+    Imm = fieldFromInstruction(Insn, 0, 8) << 2;
+    Inst.addOperand(MCOperand::createImm(Imm));
+  }
+
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeAddiuRxPcMips16(MCInst &Inst, unsigned Insn,
+                                          uint64_t Address,
+                                          const MCDisassembler *Decoder) {
+  unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
+  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+  unsigned Imm;
+
+  Inst.addOperand(MCOperand::createReg(Reg));
+  Inst.addOperand(MCOperand::createReg(Mips::PC));
+
+  if (InstructionIsMips16Extended(Insn)) {
+    Imm = fieldFromInstruction(Insn, 0, 5);
+    Imm |= fieldFromInstruction(Insn, 21, 6) << 5;
+    Imm |= fieldFromInstruction(Insn, 16, 5) << 11;
+    Inst.addOperand(MCOperand::createImm(SignExtend32<16>(Imm)));
+  } else {
+    Imm = fieldFromInstruction(Insn, 0, 8) << 2;
+    Inst.addOperand(MCOperand::createImm(Imm));
+  }
+
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeAddiuSpMips16(MCInst &Inst, unsigned Insn,
+                                        uint64_t Address,
+                                        const MCDisassembler *Decoder) {
+  unsigned Imm;
+
+  Inst.addOperand(MCOperand::createReg(Mips::SP));
+
+  if (InstructionIsMips16Extended(Insn)) {
+    Imm = fieldFromInstruction(Insn, 0, 5);
+    Imm |= fieldFromInstruction(Insn, 21, 6) << 5;
+    Imm |= fieldFromInstruction(Insn, 16, 5) << 11;
+    Inst.addOperand(MCOperand::createImm(SignExtend32<16>(Imm)));
+  } else {
+    Imm = fieldFromInstruction(Insn, 0, 8) << 3;
+    Inst.addOperand(MCOperand::createImm(SignExtend32<11>(Imm)));
+  }
+
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeJalrRaRxMips16(MCInst &Inst, unsigned Insn,
+                                         uint64_t Address,
+                                         const MCDisassembler *Decoder) {
+  unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
+  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+
+  Inst.addOperand(MCOperand::createReg(Mips::RA));
+  Inst.addOperand(MCOperand::createReg(Reg));
+
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeJrRaMips16(MCInst &Inst, unsigned Insn,
+                                     uint64_t Address,
+                                     const MCDisassembler *Decoder) {
+  Inst.addOperand(MCOperand::createReg(Mips::RA));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeSwRaSpMips16(MCInst &Inst, unsigned Insn,
+                                       uint64_t Address,
+                                       const MCDisassembler *Decoder) {
+  int Offset;
+
+  Inst.addOperand(MCOperand::createReg(Mips::RA));
+
+  if (InstructionIsMips16Extended(Insn)) {
+    Offset = fieldFromInstruction(Insn, 0, 5);
+    Offset |= fieldFromInstruction(Insn, 21, 6) << 5;
+    Offset |= fieldFromInstruction(Insn, 16, 5) << 11;
+    return DecodeMemSprelMips16<0>(Inst, Offset, Address, Decoder);
+  } else {
+    Offset = fieldFromInstruction(Insn, 0, 8) << 2;
+    return DecodeMemSprelMips16<2>(Inst, Offset, Address, Decoder);
+  }
 }
