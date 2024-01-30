@@ -1442,7 +1442,11 @@ DecodeStatus MipsDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
 static DecodeStatus
 DecodeCPU16RegsRegisterClass(MCInst &Inst, unsigned RegNo, uint64_t Address,
                              const MCDisassembler *Decoder) {
-  return MCDisassembler::Fail;
+  if (RegNo > 7)
+    return MCDisassembler::Fail;
+  unsigned Reg = getReg(Decoder, Mips::CPU16RegsRegClassID, RegNo);
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
 }
 
 static DecodeStatus DecodeGPR64RegisterClass(MCInst &Inst, unsigned RegNo,
