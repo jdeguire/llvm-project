@@ -1613,7 +1613,7 @@ static DecodeStatus DecodeMemMips16(MCInst &Inst, unsigned Value,
                                     const MCDisassembler *Decoder) {
   // Value is encoded as ((reg << 16) | offset). 
   // See MipsMCCodeEmitter::getMemEncoding().            
-  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, (Value >> 16) & 0x07);
+  unsigned Reg = getReg(Decoder, Mips::CPU16RegsRegClassID, (Value >> 16) & 0x07);
   int Offset = SignExtend32<16>((Value & 0xFFFF) << ShiftAmount);
 
   Inst.addOperand(MCOperand::createReg(Reg));
@@ -2787,7 +2787,7 @@ static DecodeStatus DecodeAddiuRxSpMips16(MCInst &Inst, unsigned Insn,
                                           uint64_t Address,
                                           const MCDisassembler *Decoder) {
   unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
-  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+  unsigned Reg = getReg(Decoder, Mips::CPU16RegsRegClassID, RegNo);
   unsigned Imm;
 
   Inst.addOperand(MCOperand::createReg(Reg));
@@ -2810,7 +2810,7 @@ static DecodeStatus DecodeAddiuRxPcMips16(MCInst &Inst, unsigned Insn,
                                           uint64_t Address,
                                           const MCDisassembler *Decoder) {
   unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
-  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+  unsigned Reg = getReg(Decoder, Mips::CPU16RegsRegClassID, RegNo);
   unsigned Imm;
 
   Inst.addOperand(MCOperand::createReg(Reg));
@@ -2853,7 +2853,7 @@ static DecodeStatus DecodeJalrRaRxMips16(MCInst &Inst, unsigned Insn,
                                          uint64_t Address,
                                          const MCDisassembler *Decoder) {
   unsigned RegNo = fieldFromInstruction(Insn, 8, 3);
-  unsigned Reg = getReg(Decoder, Mips::GPR32RegClassID, RegNo);
+  unsigned Reg = getReg(Decoder, Mips::CPU16RegsRegClassID, RegNo);
 
   Inst.addOperand(MCOperand::createReg(Mips::RA));
   Inst.addOperand(MCOperand::createReg(Reg));
@@ -2881,7 +2881,7 @@ static DecodeStatus DecodeSwRaSpMips16(MCInst &Inst, unsigned Insn,
     Offset |= fieldFromInstruction(Insn, 16, 5) << 11;
     return DecodeMemSprelMips16<0>(Inst, Offset, Address, Decoder);
   } else {
-    Offset = fieldFromInstruction(Insn, 0, 8) << 2;
+    Offset = fieldFromInstruction(Insn, 0, 8);
     return DecodeMemSprelMips16<2>(Inst, Offset, Address, Decoder);
   }
 }
