@@ -82,8 +82,8 @@ sw $4, 104($t6)              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction 
 # These instructions are valid in MIPS16 and use MIPS16 registers, 
 # but the immediates are accepted in MIPS32 mode only.
 # TODO: MIPS32 and microMIPS generate asm sequences in 
-#        MipsAsmParser::ExpandMem16Instruction() to make these work.
-#        Should MIPS16 do that too or should the others be reworked?
+#        MipsAsmParser::ExpandMem16Instruction() and expandAliasImmediate() 
+#        to make these work. Those need to be updated for MIPS16.
 addiu $v0, $s0, -16385       # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 addiu $a2, $a1, 16384        # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 addiu $v0, 32768             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
@@ -115,7 +115,6 @@ sw $s1, 32768($sp)           # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction 
 sw $ra, -32769($sp)          # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 sw $ra, 32768($sp)           # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 li $a3, -1                   # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
-
 
 # These instructions are valid in MIPS16 and use MIPS16 registers,
 # but have out of range immediate values.
@@ -149,18 +148,41 @@ btnez 131072                 # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch targe
 cmpi $a0, -1                 # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit unsigned immediate
 cmpi $5, 65536               # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit unsigned immediate
 jal -256                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch target out of range
-jal 254                      # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
 jal 268435456                # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch target out of range
 jalx -256                    # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch target out of range
-jalx 254                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
 jalx 268435456               # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch target out of range
 sll $s0, $2, 32              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 5-bit unsigned immediate
 slti $a1, -32769             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit signed immediate
 slti $16, 32768              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit signed immediate
-sltiu $5, -32769             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit unsigned immediate
-sltiu $5, 65536              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit unsigned immediate
+sltiu $5, -32769             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit signed immediate
+sltiu $5, 65536              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 16-bit signed immediate
 sra $s0, $6, 32              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 5-bit unsigned immediate
 srl $v0, $17, 32             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: expected 5-bit unsigned immediate
+
+# Unalingned branches and jumps
+
+b -851                       # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+b 71                         # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+b -24193                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+b 30343                      # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+beqz $17, -211               # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+beqz $v1, 207                # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+beqz $s1, -39467             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+beqz $a0, 26545              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bnez $6, -169                # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bnez $a3, 139                # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bnez $3, -10353              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bnez $s1, 61261              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bteqz -169                   # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bteqz 47                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bteqz -18163                 # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+bteqz 61095                  # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+btnez -161                   # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+btnez 71                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+btnez -29969                 # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+btnez 44113                  # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+jal 254                      # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
+jalx 254                     # CHECK: :[[@LINE]]:{{[0-9]+}}: error: branch to misaligned address
 
 # Try malformed versions of SAVE and RESTORE.
 
