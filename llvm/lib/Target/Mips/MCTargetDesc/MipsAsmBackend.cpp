@@ -605,7 +605,7 @@ LLVM_DEBUG(dbgs() << "mayNeedRelaxation\n");
     if (Inst.getOperand(RelaxableOp).isExpr())
       return true;
   }
-    return true;
+
   return false;
 }
 
