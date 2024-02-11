@@ -268,15 +268,13 @@ def calltarget_mips16 : Operand<iPTR> {
 
 // These ensure that the compressed branch is tried first by being a subclass
 // of MipsJumpTargetAsmOperand. They also require a constant immediate because
-// there is no fixup available for the compressed branches. The LSbit of the 
-// immediate will be ignored for compability with GNU AS, which expects it to
-// be set.
+// there is no fixup available for the compressed branches.
 // TODO: Can these two use the same encoder and maybe decoder methods?
 def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
   let Name = "JumpTarget11Mips16";
   let ParserMethod = "parseJumpTarget";
-  let PredicateMethod = "isConstantSImm<12, 0>";
+  let PredicateMethod = "isConstantScaledSImm<11, 1>";
   let RenderMethod = "addImmOperands";
 }
 def brtarget11_mips16 : Operand<OtherVT> {
@@ -291,7 +289,7 @@ def Mips16JumpTarget8AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
   let Name = "JumpTarget8Mips16";
   let ParserMethod = "parseJumpTarget";
-  let PredicateMethod = "isConstantSImm<9, 0>";
+  let PredicateMethod = "isConstantScaledSImm<8, 1>";
   let RenderMethod = "addImmOperands";
 }
 def brtarget8_mips16 : Operand<OtherVT> {

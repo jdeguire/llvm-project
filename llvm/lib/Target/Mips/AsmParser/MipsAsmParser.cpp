@@ -1540,9 +1540,14 @@ public:
   }
 
   template <unsigned Bits, unsigned ShiftLeftAmount>
+  bool isConstantScaledSImm() const {
+    return isConstantImm() &&
+           isShiftedInt<Bits, ShiftLeftAmount>(getConstantImm());
+  }
+
+  template <unsigned Bits, unsigned ShiftLeftAmount>
   bool isScaledSImm() const {
-    if (isConstantImm() &&
-        isShiftedInt<Bits, ShiftLeftAmount>(getConstantImm()))
+    if (isConstantScaledSImm<Bits, ShiftLeftAmount>())
       return true;
     // Operand can also be a symbol or symbol plus
     // offset in case of relocations.
@@ -2234,8 +2239,8 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
         break; // We'll deal with this situation later on when applying fixups.
       if (!isInt<17>(Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
-      // For now, ignore the LSbit for compability with GNU AS, which expects
-      // the offset to have the LSbit set.
+      if (offsetToAlignment(Offset.getImm(), Align(2)))
+        return Error(IDLoc, "branch to misaligned address");
       break;
     case Mips::BeqzRxImmX16:
     case Mips::BnezRxImmX16:
@@ -2245,8 +2250,8 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
         break; // We'll deal with this situation later on when applying fixups.
       if (!isInt<17>(Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
-      // For now, ignore the LSbit for compability with GNU AS, which expects
-      // the offset to have the LSbit set.
+      if (offsetToAlignment(Offset.getImm(), Align(2)))
+        return Error(IDLoc, "branch to misaligned address");
       break;
     case Mips::Jal16imm:
     case Mips::Jalx16:
@@ -2473,8 +2478,6 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
 
     MCOperand Opnd;
     int Imm;
-#warning Do NOT put the MIPS16 memory instructions in here (see TODO above). Instead, use this...
-#warning ...info to properly make predicate methods for the MIPS16 memory instructions.
     switch (Opcode) {
       default:
         break;
