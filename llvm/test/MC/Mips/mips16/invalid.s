@@ -81,9 +81,8 @@ sw $4, 104($t6)              # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction 
 
 # These instructions are valid in MIPS16 and use MIPS16 registers, 
 # but the immediates are accepted in MIPS32 mode only.
-# TODO: MIPS32 and microMIPS generate asm sequences in 
-#        MipsAsmParser::ExpandMem16Instruction() and expandAliasImmediate() 
-#        to make these work. Those need to be updated for MIPS16.
+# TODO: Add large immediate support to MIPS16.
+#       See MipsAsmParser::ExpandMem16Instruction() and expandAliasImmediate().
 addiu $v0, $s0, -16385       # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 addiu $a2, $a1, 16384        # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled
 addiu $v0, 32768             # CHECK: :[[@LINE]]:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled

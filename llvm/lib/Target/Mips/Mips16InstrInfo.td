@@ -944,7 +944,6 @@ def AddiuRyRxImm16:
 def AddiuRyRxImmX16:
   FEXT_RRI_A16_ins<0, "addiu", IIM16Alu>, ArithLogic16Defs<0>;
 
-// TODO: Is this needed? It's used in a pattern.
 def AddiuRxRyOffMemX16:
   FEXT_RRI_A16_mem_ins<0, "addiu", mem16_ea, IIM16Alu>, ArithLogic16Defs<0> {
     let isCodeGenOnly = 1;
@@ -2036,8 +2035,6 @@ def: shift_rotate_reg16_pat<srl, SrlvRxRy16>;
 class LoadM16_pat<PatFrag OpNode, Instruction I, ComplexPattern Addr> :
   Mips16Pat<(OpNode Addr:$addr), (I Addr:$addr)>;
 
-// TODO: This probably needs the non-X short versions added here.
-//       Basically, look for all places that use "addr16".
 def: LoadM16_pat<sextloadi8, LbRxRyOffMemX16, addr16>;
 def: LoadM16_pat<zextloadi8, LbuRxRyOffMemX16, addr16>;
 def: LoadM16_pat<sextloadi16, LhRxRyOffMemX16, addr16>;
@@ -2091,7 +2088,6 @@ class SetCC_I16<PatFrag cond_op, PatLeaf imm_type, Instruction I>:
             (I CPU16Regs:$rx, imm_type:$imm16)>;
 
 
-// TODO: Non-X short version here too?
 def: Mips16Pat<(i32 addr16sp:$addr), (AddiuRxRyOffMemX16 addr16sp:$addr)>;
 
 

@@ -1856,7 +1856,6 @@ public:
             || RegIdx.Index == 16 || RegIdx.Index == 17);
   }
 
-#warning TODO: This might go away
   bool isCPU16AsmRegPlusSP() const {
     if (!(isRegIdx() && RegIdx.Kind))
       return false;

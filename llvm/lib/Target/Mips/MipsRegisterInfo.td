@@ -371,7 +371,6 @@ def CPU16Regs : RegisterClass<"Mips", [i32], 32, (add
   // Return Values and Arguments
   V0, V1, A0, A1, A2, A3)>;
 
-// TODO: This might go away.
 def CPU16RegsPlusSP : RegisterClass<"Mips", [i32], 32, (add
   // Callee save
   S0, S1,
@@ -557,7 +556,6 @@ def CPU16AsmOperand : MipsAsmRegOperand {
   let PredicateMethod = "isCPU16AsmReg";
 }
 
-// TODO: This might go away
 def CPU16AsmOperandPlusSP : MipsAsmRegOperand {
   let Name = "CPU16AsmRegPlusSP";
   let PredicateMethod = "isCPU16AsmRegPlusSP";
