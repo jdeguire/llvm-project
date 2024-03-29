@@ -366,7 +366,8 @@ IndexedMemProfRecord makeRecord(
     const MemInfoBlock &Block = MemInfoBlock()) {
   llvm::memprof::IndexedMemProfRecord MR;
   for (const auto &Frames : AllocFrames)
-    MR.AllocSites.emplace_back(Frames, Block);
+    MR.AllocSites.emplace_back(Frames, llvm::memprof::hashCallStack(Frames),
+                               Block);
   for (const auto &Frames : CallSiteFrames)
     MR.CallSites.push_back(Frames);
   return MR;
@@ -542,22 +543,14 @@ TEST_F(InstrProfTest, test_memprof_merge) {
 TEST_F(InstrProfTest, test_irpgo_function_name) {
   LLVMContext Ctx;
   auto M = std::make_unique<Module>("MyModule.cpp", Ctx);
-  // Use Mach-O mangling so that non-private symbols get a `_` prefix.
-  M->setDataLayout(DataLayout("m:o"));
   auto *FTy = FunctionType::get(Type::getVoidTy(Ctx), /*isVarArg=*/false);
 
   std::vector<std::tuple<StringRef, Function::LinkageTypes, StringRef>> Data;
-  Data.emplace_back("ExternalFoo", Function::ExternalLinkage, "_ExternalFoo");
+  Data.emplace_back("ExternalFoo", Function::ExternalLinkage, "ExternalFoo");
   Data.emplace_back("InternalFoo", Function::InternalLinkage,
-                    "MyModule.cpp;_InternalFoo");
-  Data.emplace_back("PrivateFoo", Function::PrivateLinkage,
-                    "MyModule.cpp;l_PrivateFoo");
-  Data.emplace_back("WeakODRFoo", Function::WeakODRLinkage, "_WeakODRFoo");
-  // Test Objective-C symbols
+                    "MyModule.cpp;InternalFoo");
   Data.emplace_back("\01-[C dynamicFoo:]", Function::ExternalLinkage,
                     "-[C dynamicFoo:]");
-  Data.emplace_back("-<C directFoo:>", Function::ExternalLinkage,
-                    "_-<C directFoo:>");
   Data.emplace_back("\01-[C internalFoo:]", Function::InternalLinkage,
                     "MyModule.cpp;-[C internalFoo:]");
 
@@ -569,8 +562,7 @@ TEST_F(InstrProfTest, test_irpgo_function_name) {
     auto IRPGOFuncName = getIRPGOFuncName(*F);
     EXPECT_EQ(IRPGOFuncName, ExpectedIRPGOFuncName);
 
-    auto [Filename, ParsedIRPGOFuncName] =
-        getParsedIRPGOFuncName(IRPGOFuncName);
+    auto [Filename, ParsedIRPGOFuncName] = getParsedIRPGOName(IRPGOFuncName);
     StringRef ExpectedParsedIRPGOFuncName = IRPGOFuncName;
     if (ExpectedParsedIRPGOFuncName.consume_front("MyModule.cpp;")) {
       EXPECT_EQ(Filename, "MyModule.cpp");
@@ -590,10 +582,6 @@ TEST_F(InstrProfTest, test_pgo_function_name) {
   Data.emplace_back("ExternalFoo", Function::ExternalLinkage, "ExternalFoo");
   Data.emplace_back("InternalFoo", Function::InternalLinkage,
                     "MyModule.cpp:InternalFoo");
-  Data.emplace_back("PrivateFoo", Function::PrivateLinkage,
-                    "MyModule.cpp:PrivateFoo");
-  Data.emplace_back("WeakODRFoo", Function::WeakODRLinkage, "WeakODRFoo");
-  // Test Objective-C symbols
   Data.emplace_back("\01-[C externalFoo:]", Function::ExternalLinkage,
                     "-[C externalFoo:]");
   Data.emplace_back("\01-[C internalFoo:]", Function::InternalLinkage,
@@ -611,8 +599,6 @@ TEST_F(InstrProfTest, test_pgo_function_name) {
 TEST_F(InstrProfTest, test_irpgo_read_deprecated_names) {
   LLVMContext Ctx;
   auto M = std::make_unique<Module>("MyModule.cpp", Ctx);
-  // Use Mach-O mangling so that non-private symbols get a `_` prefix.
-  M->setDataLayout(DataLayout("m:o"));
   auto *FTy = FunctionType::get(Type::getVoidTy(Ctx), /*isVarArg=*/false);
   auto *InternalFooF =
       Function::Create(FTy, Function::InternalLinkage, "InternalFoo", M.get());
@@ -1293,8 +1279,7 @@ TEST(SymtabTest, instr_prof_symtab_module_test) {
     auto IRPGOFuncName =
         ProfSymtab.getFuncOrVarName(IndexedInstrProf::ComputeHash(IRPGOName));
     EXPECT_EQ(StringRef(IRPGOName), IRPGOFuncName);
-    EXPECT_EQ(StringRef(Funcs[I]),
-              getParsedIRPGOFuncName(IRPGOFuncName).second);
+    EXPECT_EQ(StringRef(Funcs[I]), getParsedIRPGOName(IRPGOFuncName).second);
     // Ensure we can still read this old record name.
     std::string PGOName = getPGOFuncName(*F);
     auto PGOFuncName =

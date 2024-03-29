@@ -113,6 +113,18 @@ def DataLayoutSpecInterface : AttrInterface<"DataLayoutSpecInterface"> {
       /*args=*/(ins "::mlir::MLIRContext *":$context)
     >,
     InterfaceMethod<
+      /*description=*/"Returns the program memory space identifier.",
+      /*retTy=*/"::mlir::StringAttr",
+      /*methodName=*/"getProgramMemorySpaceIdentifier",
+      /*args=*/(ins "::mlir::MLIRContext *":$context)
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns the global memory space identifier.",
+      /*retTy=*/"::mlir::StringAttr",
+      /*methodName=*/"getGlobalMemorySpaceIdentifier",
+      /*args=*/(ins "::mlir::MLIRContext *":$context)
+    >,
+    InterfaceMethod<
       /*description=*/"Returns the stack alignment identifier.",
       /*retTy=*/"::mlir::StringAttr",
       /*methodName=*/"getStackAlignmentIdentifier",
@@ -269,6 +281,22 @@ def DataLayoutOpInterface : OpInterface<"DataLayoutOpInterface"> {
       }]
     >,
     StaticInterfaceMethod<
+      /*description=*/"Returns the bitwidth that should be used when "
+                      "performing index computations for the type computed "
+                      "using the relevant entries. The data layout object can "
+                      "be used for recursive queries.",
+      /*retTy=*/"std::optional<uint64_t>",
+      /*methodName=*/"getIndexBitwidth",
+      /*args=*/(ins "::mlir::Type":$type,
+                    "const ::mlir::DataLayout &":$dataLayout,
+                    "::mlir::DataLayoutEntryListRef":$params),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::mlir::detail::getDefaultIndexBitwidth(type, dataLayout,
+                                                       params);
+      }]
+    >,
+    StaticInterfaceMethod<
       /*description=*/"Returns the memory space used by the ABI computed "
                       "using the relevant entries. The data layout object "
                       "can be used for recursive queries.",
@@ -278,6 +306,30 @@ def DataLayoutOpInterface : OpInterface<"DataLayoutOpInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         return ::mlir::detail::getDefaultAllocaMemorySpace(entry);
+      }]
+    >,
+    StaticInterfaceMethod<
+      /*description=*/"Returns the memory space used by the ABI computed "
+                      "using the relevant entries. The data layout object "
+                      "can be used for recursive queries.",
+      /*retTy=*/"::mlir::Attribute",
+      /*methodName=*/"getProgramMemorySpace",
+      /*args=*/(ins "::mlir::DataLayoutEntryInterface":$entry),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::mlir::detail::getDefaultProgramMemorySpace(entry);
+      }]
+    >,
+    StaticInterfaceMethod<
+      /*description=*/"Returns the memory space used by the ABI computed "
+                      "using the relevant entries. The data layout object "
+                      "can be used for recursive queries.",
+      /*retTy=*/"::mlir::Attribute",
+      /*methodName=*/"getGlobalMemorySpace",
+      /*args=*/(ins "::mlir::DataLayoutEntryInterface":$entry),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::mlir::detail::getDefaultGlobalMemorySpace(entry);
       }]
     >,
     StaticInterfaceMethod<
@@ -363,6 +415,18 @@ def DataLayoutTypeInterface : TypeInterface<"DataLayoutTypeInterface"> {
       /*methodName=*/"getPreferredAlignment",
       /*args=*/(ins "const ::mlir::DataLayout &":$dataLayout,
                     "::mlir::DataLayoutEntryListRef":$params)
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns the bitwidth that should be used when "
+                      "performing index computations for the given "
+                      "pointer-like type. If the type is not a pointer-like "
+                      "type, returns std::nullopt.",
+      /*retTy=*/"std::optional<uint64_t>",
+      /*methodName=*/"getIndexBitwidth",
+      /*args=*/(ins "const ::mlir::DataLayout &":$dataLayout,
+                    "::mlir::DataLayoutEntryListRef":$params),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{ return std::nullopt; }]
     >,
     InterfaceMethod<
       /*desc=*/"Returns true if the two lists of entries are compatible, that "

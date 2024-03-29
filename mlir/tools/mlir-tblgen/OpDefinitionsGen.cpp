@@ -2506,7 +2506,7 @@ void OpEmitter::genPopulateDefaultAttributes() {
       }))
     return;
 
-  if (op.getDialect().usePropertiesForAttributes()) {
+  if (emitHelper.hasProperties()) {
     SmallVector<MethodParameter> paramList;
     paramList.emplace_back("::mlir::OperationName", "opName");
     paramList.emplace_back("Properties &", "properties");
@@ -2953,8 +2953,7 @@ void OpEmitter::buildParamList(SmallVectorImpl<MethodParameter> &paramList,
                              operand->isOptional());
       continue;
     }
-    if ([[maybe_unused]] const auto *operand =
-            llvm::dyn_cast_if_present<NamedProperty *>(arg)) {
+    if (llvm::isa_and_present<NamedProperty *>(arg)) {
       // TODO
       continue;
     }
@@ -3058,7 +3057,7 @@ void OpEmitter::genCodeForAddingArgAndRegionForBuilder(
         body << llvm::formatv(
             "static_cast<int32_t>(std::accumulate({0}.begin(), {0}.end(), 0, "
             "[](int32_t curSum, ::mlir::ValueRange range) {{ return curSum + "
-            "range.size(); }))",
+            "static_cast<int32_t>(range.size()); }))",
             operandName);
       } else {
         body << "static_cast<int32_t>(" << getArgumentName(op, i) << ".size())";
