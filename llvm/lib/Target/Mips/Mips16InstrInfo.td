@@ -1091,8 +1091,7 @@ def BteqzX16: FEXT_I816_B_ins<0b000, "bteqz", IIM16Alu>, cbranch16 {
 
 def BteqzT8CmpX16: FEXT_T8I816_ins<"bteqz", "cmp">, cbranch16;
 
-def BteqzT8CmpiX16: FEXT_T8I8I16_ins<"bteqz", "cmpi">,
-  cbranch16;
+def BteqzT8CmpiX16: FEXT_T8I8I16_ins<"bteqz", "cmpi">, cbranch16;
 
 def BteqzT8SltX16: FEXT_T8I816_ins<"bteqz", "slt">, cbranch16;
 
@@ -1100,8 +1099,7 @@ def BteqzT8SltuX16: FEXT_T8I816_ins<"bteqz", "sltu">, cbranch16;
 
 def BteqzT8SltiX16: FEXT_T8I8I16_ins<"bteqz", "slti">, cbranch16;
 
-def BteqzT8SltiuX16: FEXT_T8I8I16_ins<"bteqz", "sltiu">,
-  cbranch16;
+def BteqzT8SltiuX16: FEXT_T8I8I16_ins<"bteqz", "sltiu">, cbranch16;
 
 //
 // Format: BTNEZ offset MIPS16e

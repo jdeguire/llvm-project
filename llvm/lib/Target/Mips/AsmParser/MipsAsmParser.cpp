@@ -2230,6 +2230,10 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
       if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
+    // MIPS16 extended branches/jumps.
+    // The 16-bit variants do not need handling here because their predicate 
+    // methods require a scaled 8-bit constant immediate. The instruction
+    // matcher will fall back to these extended variants as needed.
     case Mips::BimmX16:
     case Mips::BteqzX16:
     case Mips::BtnezX16:
@@ -2323,7 +2327,6 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
   // three operand instructions. The pre-R6 divide instructions however have
   // two operands and explicitly define HI/LO as part of the instruction,
   // not in the operands.
-#warning TODO: Add MIPS16 div instructions here?
   unsigned FirstOp = 1;
   unsigned SecondOp = 2;
   switch (Opcode) {
@@ -2429,8 +2432,6 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
     ExpandedJalSym = true;
   }
 
-#warning TODO: Does this need modifying for MIPS16 memory instructions?
-  // Yes, yes it does. This turns instructions with too-big immediates into multiple instructions.
   if (MCID.mayLoad() || MCID.mayStore()) {
     // Check the offset of memory operand, if it is a symbol
     // reference or immediate we may have to expand instructions.
@@ -2614,11 +2615,11 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
 
   // We know we emitted an instruction on the MER_NotAMacro or MER_Success path.
   // If we're in microMIPS mode then we must also set EF_MIPS_MICROMIPS.
-#warning TODO: Do something like this for MIPS16?
   if (inMicroMipsMode()) {
     TOut.setUsesMicroMips();
     TOut.updateABIInfo(*this);
   }
+  // TODO: Do something similar for MIPS16?
 
   // If this instruction has a delay slot and .set reorder is active,
   // emit a NOP after it.
@@ -6320,10 +6321,6 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm8_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 8-bit unsigned immediate");
-//  case Match_SImm8_Lsl1:
-//    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-//                 "expected both 9-bit signed immediate and multiple of 2");
-#warning TODO: Check td file for types not here and see if I need to add them, like uimm8_lsl2 and uimm3_shift
   case Match_SImm8_Lsl3:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected both 11-bit signed immediate and multiple of 8");

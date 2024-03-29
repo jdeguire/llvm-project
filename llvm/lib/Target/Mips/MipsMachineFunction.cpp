@@ -84,8 +84,6 @@ void MipsFunctionInfo::initGlobalBaseReg(MachineFunction &MF) {
   Register V0 = RegInfo.createVirtualRegister(RC);
   Register V1 = RegInfo.createVirtualRegister(RC);
 
-#warning TODO: Does this functio need updating for MIPS16? Search for __gnu_local_gp maybe?
-
   if (ABI.IsN64()) {
     MF.getRegInfo().addLiveIn(Mips::T9_64);
     MBB.addLiveIn(Mips::T9_64);

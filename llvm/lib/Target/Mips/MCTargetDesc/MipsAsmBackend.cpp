@@ -575,7 +575,10 @@ getFixupKindInfo(MCFixupKind Kind) const {
 
 unsigned MipsAsmBackend::getRelaxedOpcode(unsigned Op, 
                                           const MCSubtargetInfo &STI) const {
-#warning TODO: What needs to be relaxed here? J instructions? Loads and stores?
+#warning TODO: I may have added this unnecessarily; remove if so.
+  // This might be called only for the assembler and not for code generation.
+  // The predicate methods for these already require a constant scaled immediate
+  // and so the instruction matcher will already fall back to the extended forms.
   switch (Op) {
   default:
     return Op;
@@ -695,7 +698,8 @@ bool MipsAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   }
 }
 
-#warning TODO: Make a MIPS16 version of this function and figure out where this is used.
+// TODO: Make a MIPS16 version of this function and figure out where this is
+//       used in case MIPS16 code needs to be added there, too.
 bool MipsAsmBackend::isMicroMips(const MCSymbol *Sym) const {
   if (const auto *ElfSym = dyn_cast<const MCSymbolELF>(Sym)) {
     if (ElfSym->getOther() & ELF::STO_MIPS_MICROMIPS)

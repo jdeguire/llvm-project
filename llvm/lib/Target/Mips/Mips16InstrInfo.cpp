@@ -156,7 +156,6 @@ bool Mips16InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 /// GetOppositeBranchOpc - Return the inverse of the specified
 /// opcode, e.g. turning BEQ to BNE.
 unsigned Mips16InstrInfo::getOppositeBranchOpc(unsigned Opc) const {
-#warning TODO: This table probably needs updating.
   switch (Opc) {
   case Mips::BeqzRxImmX16: return Mips::BnezRxImmX16;
   case Mips::BnezRxImmX16: return Mips::BeqzRxImmX16;
@@ -418,7 +417,7 @@ unsigned Mips16InstrInfo::loadImmediate(unsigned FrameReg, int64_t Imm,
         .addReg(Reg);
   }
   else
-    BuildMI(MBB, II, DL, get(Mips::  AdduRxRyRz16), Reg).addReg(FrameReg)
+    BuildMI(MBB, II, DL, get(Mips::AdduRxRyRz16), Reg).addReg(FrameReg)
       .addReg(Reg, RegState::Kill);
   if (FirstRegSaved || SecondRegSaved) {
     II = std::next(II);
@@ -470,7 +469,6 @@ const MipsInstrInfo *llvm::createMips16InstrInfo(const MipsSubtarget &STI) {
 
 bool Mips16InstrInfo::validImmediate(unsigned Opcode, unsigned Reg,
                                      int64_t Amount) {
-#warning TODO: Do the non-X short versions of the instructions need to be added here?
   switch (Opcode) {
   case Mips::LbRxRyOffMemX16:
   case Mips::LbuRxRyOffMemX16:

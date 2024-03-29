@@ -79,7 +79,8 @@ void Mips16DAGToDAGISel::initGlobalBaseReg(MachineFunction &MF) {
   V1 = RegInfo.createVirtualRegister(RC);
   V2 = RegInfo.createVirtualRegister(RC);
 
-
+  // FIXME: This seems like it should not use a PC-relative ADD with MO_ABS_LO.
+  //        Should AddiuRxImmX16 be used instead?
   BuildMI(MBB, I, DL, TII.get(Mips::LiRxImmX16), V0)
       .addExternalSymbol("_gp_disp", MipsII::MO_ABS_HI);
   BuildMI(MBB, I, DL, TII.get(Mips::AddiuRxPcImmX16), V1)

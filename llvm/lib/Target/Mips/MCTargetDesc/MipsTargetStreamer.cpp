@@ -898,6 +898,7 @@ void MipsTargetELFStreamer::emitLabel(MCSymbol *S) {
 
   if (isMicroMipsEnabled())
     Symbol->setOther(ELF::STO_MIPS_MICROMIPS);
+  // TODO: Does this need to do something similar for MIPS16?
 }
 
 void MipsTargetELFStreamer::finish() {
@@ -1007,6 +1008,8 @@ void MipsTargetELFStreamer::setUsesMicroMips() {
   MCA.setELFHeaderEFlags(Flags);
 }
 
+// TODO: Should this be split into emitDirectiveSet(No)MipS16() and
+//       setUsesMips16() like with microMIPS above?
 void MipsTargetELFStreamer::emitDirectiveSetMips16() {
   MCAssembler &MCA = getStreamer().getAssembler();
   unsigned Flags = MCA.getELFHeaderEFlags();

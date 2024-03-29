@@ -754,7 +754,7 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
   if (Kind == MCExpr::Target) {
     const MipsMCExpr *MipsExpr = cast<MipsMCExpr>(Expr);
 
-#warning TODO: Need to add MIPS16 fixups to this switch/case.
+    // TODO: Need to add MIPS16 fixups to this switch/case.
     Mips::Fixups FixupKind = Mips::Fixups(0);
     switch (MipsExpr->getKind()) {
     case MipsMCExpr::MEK_None:
@@ -820,15 +820,15 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_GOT_OFST;
       break;
     case MipsMCExpr::MEK_GPREL:
-#warning TODO: This needs MIPS16 GPREL, but what about microMIPS GPREL16?
       FixupKind = Mips::fixup_Mips_GPREL16;
       break;
     case MipsMCExpr::MEK_LO:
       // Check for %lo(%neg(%gp_rel(X)))
       if (MipsExpr->isGpOff()) {
-        // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+        // %neg is unusable in MIPS16 mode because there is no MIPS16_SUB fixup.
         if (isMips16(STI)) {
-          Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+          Ctx.reportError(Expr->getLoc(),
+                          "expression not supported with MIPS16");
           return 0;
         }
 
@@ -850,9 +850,10 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
     case MipsMCExpr::MEK_HI:
       // Check for %hi(%neg(%gp_rel(X)))
       if (MipsExpr->isGpOff()) {
-        // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+        // %neg is unusable in MIPS16 mode because there is no MIPS16_SUB fixup.
         if (isMips16(STI)) {
-          Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+          Ctx.reportError(Expr->getLoc(),
+                          "expression not supported with MIPS16");
           return 0;
         }
 
@@ -886,9 +887,10 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_TPREL_LO;
       break;
     case MipsMCExpr::MEK_NEG:
-      // %neg is not usable in MIPS16 mode because there is no MIPS16_SUB fixup.
+      // %neg is unusable in MIPS16 mode because there is no MIPS16_SUB fixup.
       if (isMips16(STI)) {
-        Ctx.reportError(Expr->getLoc(), "expression not supported with MIPS16");
+        Ctx.reportError(Expr->getLoc(), 
+                        "expression not supported with MIPS16");
         return 0;
       }
 
@@ -926,7 +928,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
 }
 
 /// Return binary encoding of MIPS16 save and restore operands.
-unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned OpNo,
+unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, 
+                                           unsigned OpNo,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
   union {
@@ -960,7 +963,8 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
     switch(MI.getOperand(OpNo).getReg()) {
     default:
     {
-      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
+      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo),
+                                          Fixups, STI);
       if(NumXsRegs < (RegIdx - 17))
         NumXsRegs = RegIdx - 17;
       break;
@@ -1009,9 +1013,10 @@ unsigned MipsMCCodeEmitter::getSaveRestoreEncoding(const MCInst &MI, unsigned Op
   Encoding.bits.framesize = MI.getOperand(OpNo).getImm() >> 3;
   ++OpNo;
 
-  // Get static argument regs (ones that are saved at the end of the callee stack).
+  // Get static argument regs (ones saved at the end of the callee stack).
   while (OpNo < MI.getNumOperands() && MI.getOperand(OpNo).isReg()) {
-      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
+      unsigned RegIdx = getMachineOpValue(MI, MI.getOperand(OpNo),
+                                          Fixups, STI);
       if(NumAregStatics < (8 - RegIdx))
         NumAregStatics = 8 - RegIdx;
       

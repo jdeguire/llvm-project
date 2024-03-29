@@ -687,8 +687,6 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &Val,
   }
 }
 
-#warning TODO: Search for fixup_MICROMIPS stuff to see where and how they are used.
-
 std::unique_ptr<MCObjectTargetWriter>
 llvm::createMipsELFObjectWriter(const Triple &TT, bool IsN32) {
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());

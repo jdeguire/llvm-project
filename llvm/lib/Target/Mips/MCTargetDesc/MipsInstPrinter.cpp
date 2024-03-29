@@ -88,29 +88,6 @@ void MipsInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     O << "\t.set\tpush\n";
     O << "\t.set\tmips32r2\n";
     break;
-#warning TODO: Remove this?
-#if 0
-  case Mips::Save16:
-    O << "\tsave\t";
-    printSaveRestore(MI, STI, O);
-    O << " # 16 bit inst\n";
-    return;
-  case Mips::SaveX16:
-    O << "\tsave\t";
-    printSaveRestore(MI, STI, O);
-    O << "\n";
-    return;
-  case Mips::Restore16:
-    O << "\trestore\t";
-    printSaveRestore(MI, STI, O);
-    O << " # 16 bit inst\n";
-    return;
-  case Mips::RestoreX16:
-    O << "\trestore\t";
-    printSaveRestore(MI, STI, O);
-    O << "\n";
-    return;
-#endif
   }
 
   // Try to print any aliases first.

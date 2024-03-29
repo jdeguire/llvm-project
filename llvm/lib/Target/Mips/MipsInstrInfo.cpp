@@ -452,12 +452,23 @@ LLVM_DEBUG(dbgs() << "isBranchOffsetInRange\n");
   case Mips::BNZ_V:
     return isInt<18>(BrOffset);
 
-#warning TODO: This probably needs other MIPS16 branches, like bnez and beqz and their "t" forms.
   // MIPS16 branches.
   case Mips::Bimm16:
     return isInt<12>(BrOffset);
 
   case Mips::BimmX16:
+    return isInt<17>(BrOffset);
+
+  case Mips::BeqzRxImm16:
+  case Mips::BnezRxImm16:
+  case Mips::Bteqz16:
+  case Mips::Btnez16:
+    return isInt<9>(BrOffset);
+
+  case Mips::BeqzRxImmX16:
+  case Mips::BnezRxImmX16:
+  case Mips::BteqzX16:
+  case Mips::BtnezX16:
     return isInt<17>(BrOffset);
   }
 
