@@ -376,37 +376,20 @@ getBranchTargetOpValueMM(const MCInst &MI, unsigned OpNo,
   return 0;
 }
 
-/// getBranchTarget8OpValueMips16 - Return binary encoding of the MIPS16
-/// branch target operand. The 16-bit instruction does not support relocations.
-#warning TODO: Can these 8- and 11-bit encoder functions be merged? 
+/// getBranchTargetOpValueMips16 - Return binary encoding of the MIPS16
+/// branch target operand. This is for the 16-bit instructions, which
+/// do not support relocations.
 unsigned MipsMCCodeEmitter::
-getBranchTarget8OpValueMips16(const MCInst &MI, unsigned OpNo,
+getBranchTargetOpValueMips16(const MCInst &MI, unsigned OpNo,
                               SmallVectorImpl<MCFixup> &Fixups,
                               const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
-LLVM_DEBUG(dbgs() << "getBranchTarget8OpValueMips16 (short)\n");
+
   // If the destination is an immediate, divide by 2.
   if (MO.isImm()) return MO.getImm() >> 1;
 
   assert(false &&
-         "getBranchTarget8OpValueMips16 expects only constant immediates");
-
-  return 0;
-}
-
-/// getBranchTarget11OpValueMips16 - Return binary encoding of the MIPS16
-/// branch target operand. The 16-bit instruction does not support relocations.
-unsigned MipsMCCodeEmitter::
-getBranchTarget11OpValueMips16(const MCInst &MI, unsigned OpNo,
-                               SmallVectorImpl<MCFixup> &Fixups,
-                               const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-LLVM_DEBUG(dbgs() << "getBranchTarget11OpValueMips16 (short)\n");
-  // If the destination is an immediate, divide by 2.
-  if (MO.isImm()) return MO.getImm() >> 1;
-
-  assert(false &&
-         "getBranchTarget11OpValueMips16 expects only constant immediates");
+         "getBranchTargetOpValueMips16 expects only constant immediates");
 
   return 0;
 }
@@ -419,7 +402,7 @@ getBranchTarget16OpValueMips16(const MCInst &MI, unsigned OpNo,
                                SmallVectorImpl<MCFixup> &Fixups,
                                const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
-LLVM_DEBUG(dbgs() << "getBranchTarget16OpValueMips16 (extended)\n");
+
   // If the destination is an immediate, divide by 2.
   if (MO.isImm()) return MO.getImm() >> 1;
 
@@ -667,19 +650,6 @@ getSImm8Lsl3Encoding(const MCInst &MI, unsigned OpNo,
 }
 
 unsigned MipsMCCodeEmitter::
-getSImm8Lsl1Encoding(const MCInst &MI, unsigned OpNo,
-                     SmallVectorImpl<MCFixup> &Fixups,
-                     const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-  if (MO.isImm()) {
-    unsigned Value = MO.getImm();
-    return Value >> 1;
-  }
-
-  return 0;
-}
-
-unsigned MipsMCCodeEmitter::
 getSImm11Lsl1Encoding(const MCInst &MI, unsigned OpNo,
                       SmallVectorImpl<MCFixup> &Fixups,
                       const MCSubtargetInfo &STI) const {
@@ -713,19 +683,6 @@ getSImm9AddiuspValue(const MCInst &MI, unsigned OpNo,
   if (MO.isImm()) {
     unsigned Binary = (MO.getImm() >> 2) & 0x0000ffff;
     return (((Binary & 0x8000) >> 7) | (Binary & 0x00ff));
-  }
-
-  return 0;
-}
-
-unsigned MipsMCCodeEmitter::
-getUImm26Lsl2Encoding(const MCInst &MI, unsigned OpNo,
-                      SmallVectorImpl<MCFixup> &Fixups,
-                      const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-  if (MO.isImm()) {
-    unsigned Value = MO.getImm();
-    return Value >> 2;
   }
 
   return 0;

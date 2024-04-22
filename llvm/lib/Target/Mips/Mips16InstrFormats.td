@@ -128,6 +128,7 @@ class FRI16<bits<5> op, dag outs, dag ins, string asmstr,
   let Inst{7-0} = imm8;
 }
 
+// TODO: This might be able to go away.
 class FRI16_mem<bits<5> op, dag outs, dag ins, string asmstr,
                 list<dag> pattern, InstrItinClass itin>:
   MipsInst16<outs, ins, asmstr, pattern, itin>
@@ -260,6 +261,7 @@ class FRRI16<bits<5> op, dag outs, dag ins, string asmstr,
   let Inst{4-0}   = imm5;
 }
 
+// TODO: This might be able to go away.
 class FRRI16_mem<bits<5> op, dag outs, dag ins, string asmstr,
                   list<dag> pattern, InstrItinClass itin>:
   MipsInst16<outs, ins, asmstr, pattern, itin>
@@ -535,6 +537,7 @@ class FEXT_RI16<bits<5> _op, dag outs, dag ins, string asmstr,
 
 }
 
+// TODO: This might be able to go away.
 class FEXT_RI16_mem<bits<5> _op, dag outs, dag ins, string asmstr,
                 list<dag> pattern, InstrItinClass itin>:
   MipsInst16_EXTEND<outs, ins, asmstr, pattern, itin>
@@ -581,6 +584,7 @@ class FEXT_RRI16<bits<5> _op, dag outs, dag ins, string asmstr,
 
 }
 
+// TODO: This might be able to go away.
 class FEXT_RRI16_mem<bits<5> _op, dag outs, dag ins, string asmstr,
                  list<dag> pattern, InstrItinClass itin>:
   MipsInst16_EXTEND<outs, ins, asmstr, pattern, itin>

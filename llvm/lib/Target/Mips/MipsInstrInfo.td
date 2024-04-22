@@ -668,15 +668,8 @@ def SImm32RelaxedAsmOperandClass
 }
 def SImm32AsmOperandClass
     : SImmAsmOperandClass<32, [SImm32RelaxedAsmOperandClass]>;
-def ConstantUImm26Lsl2AsmOperandClass : AsmOperandClass {
-  let Name = "UImm26Lsl2";
-  let RenderMethod = "addImmOperands";
-  let PredicateMethod = "isScaledUImm<26, 2>";
-  let SuperClasses = [SImm32AsmOperandClass];
-  let DiagnosticType = "UImm26_Lsl2";
-}
 def ConstantUImm26AsmOperandClass
-    : ConstantUImmAsmOperandClass<26, [ConstantUImm26Lsl2AsmOperandClass]>;
+    : ConstantUImmAsmOperandClass<26, [SImm32AsmOperandClass]>;
 def ConstantUImm20AsmOperandClass
     : ConstantUImmAsmOperandClass<20, [ConstantUImm26AsmOperandClass]>;
 def ConstantSImm19Lsl2AsmOperandClass : AsmOperandClass {
@@ -728,13 +721,6 @@ def ConstantSImm10Lsl3AsmOperandClass : AsmOperandClass {
   let SuperClasses = [ConstantSImm15AsmOperandClass];
   let DiagnosticType = "SImm10_Lsl3";
 }
-def ConstantSImm11Lsl1AsmOperandClass : AsmOperandClass {
-  let Name = "SImm11Lsl1";
-  let RenderMethod = "addImmOperands";
-  let PredicateMethod = "isScaledSImm<11, 1>";
-  let SuperClasses = [ConstantSImm10Lsl3AsmOperandClass];
-  let DiagnosticType = "SImm11_Lsl1";
-}
 def ConstantSImm10Lsl2AsmOperandClass : AsmOperandClass {
   let Name = "SImm10Lsl2";
   let RenderMethod = "addImmOperands";
@@ -771,18 +757,11 @@ def ConstantSImm10AsmOperandClass
     : ConstantSImmAsmOperandClass<10, [ConstantUImm8Lsl2AsmOperandClass]>;
 def ConstantSImm9AsmOperandClass
     : ConstantSImmAsmOperandClass<9, [ConstantSImm10AsmOperandClass]>;
-def ConstantSImm8Lsl1AsmOperandClass : AsmOperandClass {
-  let Name = "SImm8Lsl1";
-  let RenderMethod = "addImmOperands";
-  let PredicateMethod = "isScaledSImm<8, 1>";
-  let SuperClasses = [ConstantSImm9AsmOperandClass];
-  let DiagnosticType = "SImm8_Lsl1";
-}
 def ConstantSImm7Lsl2AsmOperandClass : AsmOperandClass {
   let Name = "SImm7Lsl2";
   let RenderMethod = "addImmOperands";
   let PredicateMethod = "isScaledSImm<7, 2>";
-  let SuperClasses = [ConstantSImm8Lsl1AsmOperandClass];
+  let SuperClasses = [ConstantSImm9AsmOperandClass];
   let DiagnosticType = "SImm7_Lsl2";
 }
 def ConstantUImm8AsmOperandClass
@@ -1016,12 +995,6 @@ def uimm8_lsl2 : Operand<OtherVT> {
   let ParserMatchClass = ConstantUImm8Lsl2AsmOperandClass;
 }
 
-def uimm26_lsl2 : Operand<OtherVT> {
-  let EncoderMethod = "getUImm26Lsl2Encoding";
-  let DecoderMethod = "DecodeUImmWithOffsetAndScale<26, 0, 4>";
-  let ParserMatchClass = ConstantUImm26Lsl2AsmOperandClass;
-}
-
 foreach I = {16} in
   def uimm # I : Operand<i32> {
     let PrintMethod = "printUImm<" # I # ">";
@@ -1121,21 +1094,10 @@ def simm16_lsl1 : Operand<OtherVT> {
   let ParserMatchClass = ConstantSImm16Lsl1AsmOperandClass;
 }
 
-def simm11_lsl1 : Operand<OtherVT> {
-  let EncoderMethod = "getSImm11Lsl1Encoding";
-  let DecoderMethod = "DecodeSImmWithOffsetAndScale<11, 0, 2>";
-  let ParserMatchClass = ConstantSImm11Lsl1AsmOperandClass;
-}
-
 def simm8_lsl3 : Operand<OtherVT> {
   let EncoderMethod = "getSImm8Lsl3Encoding";
   let DecoderMethod = "DecodeSImmWithOffsetAndScale<8, 0, 8>";
   let ParserMatchClass = ConstantSImm8Lsl3AsmOperandClass;
-}
-def simm8_lsl1 : Operand<OtherVT> {
-  let EncoderMethod = "getSImm8Lsl1Encoding";
-  let DecoderMethod = "DecodeSImmWithOffsetAndScale<8, 0, 2>";
-  let ParserMatchClass = ConstantSImm8Lsl1AsmOperandClass;
 }
 
 def simm7_lsl2 : Operand<OtherVT> {

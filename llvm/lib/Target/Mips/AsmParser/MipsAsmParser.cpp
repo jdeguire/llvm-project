@@ -2019,7 +2019,7 @@ static bool hasShortDelaySlot(MCInst &Inst) {
     case Mips::JALRS16_MM:
     case Mips::BGEZALS_MM:
     case Mips::BLTZALS_MM:
-    case Mips::Jal16imm:
+    case Mips::Jal16:
     case Mips::Jalx16:
     case Mips::JrRa16:
     case Mips::JrRx16:
@@ -2268,7 +2268,7 @@ LLVM_DEBUG(dbgs() << "processInstruction\n");
       if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
-    case Mips::Jal16imm:
+    case Mips::Jal16:
     case Mips::Jalx16:
       assert(MCID.getNumOperands() == 1 && "unexpected number of operands");
       Offset = Inst.getOperand(0);
@@ -6434,9 +6434,6 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm26_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 26-bit unsigned immediate");
-  case Match_UImm26_Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected both 28-bit signed immediate and multiple of 4");
   case Match_SImm32:
   case Match_SImm32_Relaxed:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),

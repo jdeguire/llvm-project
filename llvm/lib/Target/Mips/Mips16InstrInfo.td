@@ -16,18 +16,20 @@
 def addr16 : ComplexPattern<iPTR, 2, "selectAddr16", [frameindex]>;
 def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 
+// The number matches the value in MipsRegisterInfo::MipsPtrClass.
+def ptr_cpu16_rc : PointerLikeRegClass<4>;
+
+
 // Some MIPS16 instructions, such as "addiu", have operands that look like
 // registers but are not encoded as normal operands. Instead, they determine
 // the opcode to use and so could be considered part of the mnemonic. These
 // define "pseudo register" operands to handle such instructions.
-// TODO: Should I change how the Operand ones (__PseudoReg) are capitalized to
-//       match other operands?
 def Mips16PCPseudoRegOperand : AsmOperandClass {
   let Name = "Mips16PCPseudoReg";
   let PredicateMethod = "isPCPseudoReg";
   let RenderMethod = "addPCPseudoRegOperands";
 }
-def PCPseudoReg : Operand<i32> {
+def pc_pseudo_reg : Operand<i32> {
   let PrintMethod = "printPCPseudoReg";
   let ParserMatchClass = Mips16PCPseudoRegOperand;
 }
@@ -37,7 +39,7 @@ def Mips16SPPseudoRegOperand : AsmOperandClass {
   let PredicateMethod = "isSPPseudoReg";
   let RenderMethod = "addSPPseudoRegOperands";
 }
-def SPPseudoReg : Operand<i32> {
+def sp_pseudo_reg : Operand<i32> {
   let PrintMethod = "printSPPseudoReg";
   let ParserMatchClass = Mips16SPPseudoRegOperand;
 }
@@ -47,50 +49,35 @@ def Mips16RAPseudoRegOperand : AsmOperandClass {
   let PredicateMethod = "isRAPseudoReg";
   let RenderMethod = "addRAPseudoRegOperands";
 }
-def RAPseudoReg : Operand<i32> {
+def ra_pseudo_reg : Operand<i32> {
   let PrintMethod = "printRAPseudoReg";
   let ParserMatchClass = Mips16RAPseudoRegOperand;
 }
 
-// The number matches the value in MipsRegisterInfo::MipsPtrClass.
-def ptr_cpu16_rc : PointerLikeRegClass<4>;
 
-// TODO: Can I remove SImm8_Lsl1? Do a search and find out later. SImm8_Lsl3 is used, so keep that,
-//       but we may not want the error message in MipsAsmParser.
-// TODO: This should probably become a base class for other memory classes and records.
-// TODO: This could possibly be modeled after MipsMemSimmAsmOperand in MipsInstrInfo.td.
-// TODO: Do we really need separate operand classes for short vs extended instructions?
-// TODO: These predicate methods will probably need updating for width and shift values.
-// TODO: Reorganize these so that matchers are next to operands like above.
-
+// MIPS16 memory operands.
+// The "Ext" operands are for the 32-bit extended instructions. The non-"Ext"
+// operands are for the 16-bit instructions. They subclass the "Ext" versions
+// so that TableGen picks the 16-bit instructions that use these operands 
+// before the extended instructions that use the superclass operands.
 class Mips16ExtMemAsmOperandBase : AsmOperandClass {
   let Name = "Mips16ExtMemBase";
   let ParserMethod = "parseMemOperand";
   let RenderMethod = "addMips16MemOperands";
 }
+class Mips16MemAsmOperandBase : Mips16ExtMemAsmOperandBase {
+  let Name = "Mips16MemBase";
+}
 
-// These are used for the extended 32-bit MIPS16 instructions. 
 def Mips16ExtMemAsmOperand : Mips16ExtMemAsmOperandBase {
   let Name = "Mips16ExtMem";
   let PredicateMethod = "isMemWithExtCPU16Base";
 }
-
-def Mips16ExtPcRelMemAsmOperand : Mips16ExtMemAsmOperandBase {
-  let Name = "Mips16ExtPcRelMem";
-  let PredicateMethod = "isMemWithExtCPU16PCBase";
-}
-
-def Mips16ExtSpRelMemAsmOperand : Mips16ExtMemAsmOperandBase {
-  let Name = "Mips16ExtSpRelMem";
-  let PredicateMethod = "isMemWithExtCPU16SPBase";
-}
-
-// These are used for the short 16-bit MIPS16 instructions. 
-// Having this subclass the "ext" version above should make TableGen pick
-// instructions that use these operands first before trying the extended
-// instructions that use the superclass operands.
-class Mips16MemAsmOperandBase : Mips16ExtMemAsmOperandBase {
-  let Name = "Mips16MemBase";
+// mem_generic is found in MipsInstrInfo.td.
+def mem16ext : mem_generic {
+  let ParserMatchClass = Mips16ExtMemAsmOperand;
+  let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
+  let DecoderMethod = "DecodeMemMips16<0>";
 }
 
 def Mips16MemAsmOperandLsl0 : Mips16MemAsmOperandBase {
@@ -98,42 +85,17 @@ def Mips16MemAsmOperandLsl0 : Mips16MemAsmOperandBase {
   let Name = "Mips16MemLsl0";
   let PredicateMethod = "isMemWithCPU16Base<0>";
 }
+def mem16_lsl0 : mem_generic {
+  let ParserMatchClass = Mips16MemAsmOperandLsl0;
+  let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
+  let DecoderMethod = "DecodeMemMips16<0>";
+}
 
 def Mips16MemAsmOperandLsl1 : Mips16MemAsmOperandBase {
   let SuperClasses = [Mips16ExtMemAsmOperand];
   let Name = "Mips16MemLsl1";
   let PredicateMethod = "isMemWithCPU16Base<1>";
 }
-
-def Mips16MemAsmOperandLsl2 : Mips16MemAsmOperandBase {
-  let SuperClasses = [Mips16ExtMemAsmOperand];
-  let Name = "Mips16MemLsl2";
-  let PredicateMethod = "isMemWithCPU16Base<2>";
-}
-
-def Mips16PcRelMemAsmOperand : Mips16MemAsmOperandBase {
-  let SuperClasses = [Mips16ExtPcRelMemAsmOperand];
-  let Name = "Mips16PcRelMem";
-  let PredicateMethod = "isMemWithCPU16PCBase";
-}
-
-def Mips16SpRelMemAsmOperand : Mips16MemAsmOperandBase {
-  let SuperClasses = [Mips16ExtSpRelMemAsmOperand];
-  let Name = "Mips16SpRelMem";
-  let PredicateMethod = "isMemWithCPU16SPBase";
-}
-
-
-// TODO: Do these need custom PrintMethod values? The base mem_generic class provides one already.
-
-// mem_generic is found in MipsInstrInfo.td.
-def mem16_lsl0 : mem_generic {
-  let ParserMatchClass = Mips16MemAsmOperandLsl0;
-  let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
-//  let EncoderMethod = "getMemEncoding<0>";
-  let DecoderMethod = "DecodeMemMips16<0>";
-}
-
 def mem16_lsl1 : mem_generic {
   let ParserMatchClass = Mips16MemAsmOperandLsl1;
   let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
@@ -141,6 +103,11 @@ def mem16_lsl1 : mem_generic {
   let DecoderMethod = "DecodeMemMips16<1>";
 }
 
+def Mips16MemAsmOperandLsl2 : Mips16MemAsmOperandBase {
+  let SuperClasses = [Mips16ExtMemAsmOperand];
+  let Name = "Mips16MemLsl2";
+  let PredicateMethod = "isMemWithCPU16Base<2>";
+}
 def mem16_lsl2 : mem_generic {
   let ParserMatchClass = Mips16MemAsmOperandLsl2;
   let MIOperandInfo = (ops ptr_cpu16_rc, uimm5);
@@ -148,45 +115,54 @@ def mem16_lsl2 : mem_generic {
   let DecoderMethod = "DecodeMemMips16<2>";
 }
 
-// Like mem16_lsl2, but the "$pc" pseudo-register is used as the offset base register.
+// These use the $pc pseudo-register as the implicit base register.
+def Mips16ExtPcRelMemAsmOperand : Mips16ExtMemAsmOperandBase {
+  let Name = "Mips16ExtPcRelMem";
+  let PredicateMethod = "isMemWithExtCPU16PCBase";
+}
+def mem16ext_pc : mem_generic {
+  let ParserMatchClass = Mips16ExtPcRelMemAsmOperand;
+  let MIOperandInfo = (ops pc_pseudo_reg, simm16);
+  let DecoderMethod = "DecodeMemPcrelMips16<0>";
+}
+
+def Mips16PcRelMemAsmOperand : Mips16MemAsmOperandBase {
+  let SuperClasses = [Mips16ExtPcRelMemAsmOperand];
+  let Name = "Mips16PcRelMem";
+  let PredicateMethod = "isMemWithCPU16PCBase";
+}
 def mem16_pc : mem_generic {
   let ParserMatchClass = Mips16PcRelMemAsmOperand;
-  let MIOperandInfo = (ops PCPseudoReg, uimm8);
+  let MIOperandInfo = (ops pc_pseudo_reg, uimm8);
   let EncoderMethod = "getMemEncoding<2>";
   let DecoderMethod = "DecodeMemPcrelMips16<2>";
 }
 
-// Like mem16_lsl2, but the "$sp" pseudo-register is used as the offset base register.
+// These use the $sp pseudo-register as the implicit base register.
+def Mips16ExtSpRelMemAsmOperand : Mips16ExtMemAsmOperandBase {
+  let Name = "Mips16ExtSpRelMem";
+  let PredicateMethod = "isMemWithExtCPU16SPBase";
+}
+def mem16ext_sp : mem_generic {
+  let ParserMatchClass = Mips16ExtSpRelMemAsmOperand;
+  let MIOperandInfo = (ops sp_pseudo_reg, simm16);
+  let DecoderMethod = "DecodeMemSprelMips16<0>";
+}
+
+def Mips16SpRelMemAsmOperand : Mips16MemAsmOperandBase {
+  let SuperClasses = [Mips16ExtSpRelMemAsmOperand];
+  let Name = "Mips16SpRelMem";
+  let PredicateMethod = "isMemWithCPU16SPBase";
+}
 def mem16_sp : mem_generic {
   let ParserMatchClass = Mips16SpRelMemAsmOperand;
-  let MIOperandInfo = (ops SPPseudoReg, uimm8);
+  let MIOperandInfo = (ops sp_pseudo_reg, uimm8);
   let EncoderMethod = "getMemEncoding<2>";
   let DecoderMethod = "DecodeMemSprelMips16<2>";
 }
 
-def mem16ext : mem_generic {
-  let ParserMatchClass = Mips16ExtMemAsmOperand;
-  let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
-  let DecoderMethod = "DecodeMemMips16<0>";
-}
-
-// Like mem16ext, but the "$pc" pseudo-register is used as the offset base register.
-def mem16ext_pc : mem_generic {
-  let ParserMatchClass = Mips16ExtPcRelMemAsmOperand;
-  let MIOperandInfo = (ops PCPseudoReg, simm16);
-  let DecoderMethod = "DecodeMemPcrelMips16<0>";
-}
-
-// Like mem16ext, but the "$sp" pseudo-register is used as the offset base register.
-def mem16ext_sp : mem_generic {
-  let ParserMatchClass = Mips16ExtSpRelMemAsmOperand;
-  let MIOperandInfo = (ops SPPseudoReg, simm16);
-  let DecoderMethod = "DecodeMemSprelMips16<0>";
-}
-
 
 // Operands for the MIPS16 "save" and "restore" instructions.
-// TODO: These will definitely need DecoderMethods!
 class SaveRestoreOperandsBase : AsmOperandClass {
   let Name = "SaveRestoreBase";
   let ParserMethod = "parseSaveRestoreOperands";
@@ -216,38 +192,11 @@ def svrs16 : svrsBase {
 }
 
 
-//
-// Address operand
-//def mem16 : Operand<i32> {  // <-- This probably needs to inherit from one of the Memory Operand types rather than Operand<i32>
-//def mem16 : mem16ext {
-//  let PrintMethod = "printMemOperand";
-//  let MIOperandInfo = (ops ptr_cpu16_rc, simm16);
-  // TODO: This will probably need a custom EncoderMethod. Does it need a DecoderMethod?
-//  let EncoderMethod = "getMemEncoding";
-//}
-
-// TODO: This will probably need to go away if the seprate SP-relative operand works. It won't work
-//       anyway because using SP is actually a different instruction code, not just an operand.
-//def mem16sp : Operand<i32> {
-//  let PrintMethod = "printMemOperand";
-  // This should be CPUSPReg but the MIPS16 subtarget isn't good enough at
-  // keeping the sp-relative load and the other varieties separate at the
-  // moment. This lie fixes the problem sufficiently well to fix the errors
-  // emitted by -verify-machineinstrs and the output ends up correct as long
-  // as we use an external assembler (which is already a requirement for MIPS16
-  // for several other reasons).
-//  let MIOperandInfo = (ops CPU16OpndPlusSP, simm16);
-//  let EncoderMethod = "getMemEncoding";
-//}
-
 def mem16_ea : Operand<i32> {
   let PrintMethod = "printMemOperandEA";
   let MIOperandInfo = (ops CPU16OpndPlusSP, simm15);
   let EncoderMethod = "getMemEncoding";
 }
-
-// TODO: Will this still be needed later?
-def pcrel16 : Operand<i32>;
 
 // Used for extended branches.
 def brtarget16_mips16 : Operand<OtherVT> {
@@ -269,7 +218,6 @@ def calltarget_mips16 : Operand<iPTR> {
 // These ensure that the compressed branch is tried first by being a subclass
 // of MipsJumpTargetAsmOperand. They also require a constant immediate because
 // there is no fixup available for the compressed branches.
-// TODO: Can these two use the same encoder and maybe decoder methods?
 def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let SuperClasses = [MipsJumpTargetAsmOperand];
   let Name = "JumpTarget11Mips16";
@@ -278,7 +226,7 @@ def Mips16JumpTarget11AsmOperand : AsmOperandClass {
   let RenderMethod = "addImmOperands";
 }
 def brtarget11_mips16 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTarget11OpValueMips16";
+  let EncoderMethod = "getBranchTargetOpValueMips16";
   let OperandType   = "OPERAND_PCREL";
   let DecoderMethod = "DecodeBranchTarget11Mips16";
   let ParserMatchClass = Mips16JumpTarget11AsmOperand;
@@ -293,7 +241,7 @@ def Mips16JumpTarget8AsmOperand : AsmOperandClass {
   let RenderMethod = "addImmOperands";
 }
 def brtarget8_mips16 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTarget8OpValueMips16";
+  let EncoderMethod = "getBranchTargetOpValueMips16";
   let OperandType   = "OPERAND_PCREL";
   let DecoderMethod = "DecodeBranchTarget8Mips16";
   let ParserMatchClass = Mips16JumpTarget8AsmOperand;
@@ -306,7 +254,6 @@ def brtarget8_mips16 : Operand<OtherVT> {
 // This is used only by Bimm16. The actual assembly value is a 12-bit signed
 // number
 //
-// TODO Remove the simm11_lsl1 type from wherever it's defined if it's no longer used.
 class FI16_B_ins<bits<5> op, string asmstr, InstrItinClass itin>:
   FI16<op, (outs), (ins brtarget11_mips16:$imm11),
             !strconcat(asmstr, "\t$imm11"), [], itin>;
@@ -316,27 +263,21 @@ class FI16_B_ins<bits<5> op, string asmstr, InstrItinClass itin>:
 // I8 instruction format
 //
 
-// TODO: Can this be combined with the one below it? The one below is the only place this is used.
-class FI816_ins_base<bits<3> _func, string asmstr,
-                     string asmstr2, InstrItinClass itin>:
-  FI816<_func, (outs), (ins simm16:$imm), !strconcat(asmstr, asmstr2),
-        [], itin>;
-
 class FI816_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
-  FI816_ins_base<_func, asmstr, "\t$imm", itin>;
+  FI816<_func, (outs), (ins simm16:$imm), !strconcat(asmstr, "\t$imm"),
+        [], itin>;
 
 class FI816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
   FI816<_func, (outs), (ins brtarget8_mips16:$imm8), 
         !strconcat(asmstr, "\t$imm8"), [], itin>;
 
 class FI816_SP_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
-  FI816<_func, (outs), (ins SPPseudoReg:$pseudo, simm8_lsl3:$imm8),
+  FI816<_func, (outs), (ins sp_pseudo_reg:$pseudo, simm8_lsl3:$imm8),
         !strconcat(asmstr, "\t$pseudo, $imm8"), [], itin>;
-//  FI816_ins_base<_func, asmstr, "\t$$sp, $imm", itin>;
 
 class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd, 
                    InstrItinClass itin>:
-  FI816<_func, (outs), (ins RAPseudoReg:$pseudo, MemOpnd:$addr),
+  FI816<_func, (outs), (ins ra_pseudo_reg:$pseudo, MemOpnd:$addr),
         !strconcat(asmstr, "\t$pseudo, $addr"), [], itin> {
   // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
   // This instruction type uses only 8 bits of the offset.
@@ -348,29 +289,13 @@ class FI816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd,
 // RI instruction format
 //
 
-//class FRI16_ins_base<bits<5> op, string asmstr, string asmstr2,
-//                     InstrItinClass itin>:
-//  FRI16<op, (outs CPU16Opnd:$rx), (ins simm16:$imm),
-//        !strconcat(asmstr, asmstr2), [], itin>;
-
-// TODO: Can I merge this with the PC and SP versions below by specifying operand type in declaration?
 class FRI16_ins<bits<5> op, string asmstr, Operand ImmOpnd, InstrItinClass itin>:
   FRI16<op, (outs CPU16Opnd:$rx), (ins ImmOpnd:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
-//  FRI16_ins_base<op, asmstr, "\t$rx, $imm8", itin>;
-
-class FRI16_TCP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm, i32imm:$size),
-            !strconcat(asmstr, "\t$rx, $imm"), [], itin>;
-
-// TODO: Can this be combined with the one below it? The one below is the only place this is used.
-class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2,
-                     InstrItinClass itin>:
-  FRI16<op, (outs), (ins CPU16Opnd:$rx, uimm8:$imm8),
-        !strconcat(asmstr, asmstr2), [], itin>;
 
 class FRI16R_ins<bits<5> op, string asmstr, InstrItinClass itin>:
-  FRI16R_ins_base<op, asmstr, "\t$rx, $imm8", itin>;
+  FRI16<op, (outs), (ins CPU16Opnd:$rx, uimm8:$imm8),
+        !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
 class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$rx_, simm16:$imm),
@@ -381,32 +306,34 @@ class F2RI16_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   let Constraints = "$rx_ = $rx";
 }
 
-// TODO: Can I merge these two by specifying the pseudo type like I do with the operand type?
-class FRI16_PC_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
-                    InstrItinClass itin>:
-  FRI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, ImmOpnd:$imm8),
+class FRI16_Pseudo_ins<bits<5> _op, string asmstr, Operand PseudoRegOpnd, 
+                        Operand ImmOpnd, InstrItinClass itin>:
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins PseudoRegOpnd:$pseudo, ImmOpnd:$imm8),
               !strconcat(asmstr, "\t$rx, $pseudo, $imm8"), [], itin>;
 
-class FRI16_SP_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
-                    InstrItinClass itin>:
-  FRI16<_op, (outs CPU16Opnd:$rx), (ins SPPseudoReg:$pseudo, ImmOpnd:$imm8),
-              !strconcat(asmstr, "\t$rx, $pseudo, $imm8"), [], itin>;
-
-// TODO: Remove simm8_lsl1 if it is no longer used.
 class FRI16_B_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
   FRI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget8_mips16:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
-// TODO: Can I remove FRI16_mem and use FRI16 instead if I use something like "let imm8 = addr{7-0}"?
 class FRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
-  FRI16_mem<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
-             !strconcat(asmstr, "\t$rx, $addr"), [], itin>;
+  FRI16<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
+             !strconcat(asmstr, "\t$rx, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only 8 bits of the offset.
+  bits<8> addr;
+  let imm8 = addr{7-0};
+}
 
 class FRI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
-  FRI16_mem<op, (outs ), (ins  CPU16Opnd:$rx, MemOpnd:$addr),
-             !strconcat(asmstr, "\t$rx, $addr"), [], itin>;
+  FRI16<op, (outs ), (ins  CPU16Opnd:$rx, MemOpnd:$addr),
+             !strconcat(asmstr, "\t$rx, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only 8 bits of the offset.
+  bits<8> addr;
+  let imm8 = addr{7-0};
+}
 
 //
 // RRI-A instruction format
@@ -427,16 +354,27 @@ class FSHIFT16_ins<bits<2> _f, string asmstr, InstrItinClass itin>:
 // RRI memory instruction formats
 //
 
-// TODO: Can I remove FRRI16_mem and use FRRI16 instead if I use "let" to set "rx" and "imm5" to parts of "addr"?
 class FRRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
-  FRRI16_mem<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
-             !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
+  FRRI16<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
+             !strconcat(asmstr, "\t$ry, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses 3 bits of the reg and 5 bits of the offset.
+  bits<19> addr;
+  let rx = addr{18-16};
+  let imm5 = addr{4-0};
+}
 
 class FRRI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
-  FRRI16_mem<op, (outs ), (ins  CPU16Opnd:$ry, MemOpnd:$addr),
-             !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
+  FRRI16<op, (outs ), (ins  CPU16Opnd:$ry, MemOpnd:$addr),
+             !strconcat(asmstr, "\t$ry, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses 3 bits of the reg and 5 bits of the offset.
+  bits<19> addr;
+  let rx = addr{18-16};
+  let imm5 = addr{4-0};
+}
 
 
 //
@@ -454,25 +392,6 @@ class FEXT_CCRXI16_ins<string asmstr>:
 
 // JAL and JALX instruction format
 //
-class FJAL16_codegen_ins<bits<1> _X, string asmstr,
-                 InstrItinClass itin>:
-  FJAL16<_X, (outs), (ins uimm26:$imm26),
-         !strconcat(asmstr, "\t$imm26\n\tnop"),[],
-         itin>  {
-  let isCodeGenOnly=1;
-  let Size=6;
-}
-
-class FJALB16_codegen_ins<bits<1> _X, string asmstr,
-                 InstrItinClass itin>:
-  FJAL16<_X, (outs), (ins uimm26:$imm26),
-         !strconcat(asmstr, "\t$imm26\t# branch\n\tnop"),[],
-         itin>  {
-  let isCodeGenOnly=1;
-  let Size=6;
-}
-
-// TODO: Remove the uimm26_lsl2 type if it is no longer used.
 class FJAL16_ins<bits<1> _X, string asmstr,
                  InstrItinClass itin>:
   FJAL16<_X, (outs), (ins calltarget_mips16:$imm26),
@@ -481,7 +400,6 @@ class FJAL16_ins<bits<1> _X, string asmstr,
 //
 // EXT-I instruction format
 //
-// TODO: Remove the simm16_lsl1 type if it is no longer used.
 class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
   FEXT_I16<eop, (outs), (ins brtarget16_mips16:$imm16),
            !strconcat(asmstr, "\t$imm16"),[], itin>;
@@ -490,28 +408,18 @@ class FEXT_I16_ins<bits<5> eop, string asmstr, InstrItinClass itin> :
 // EXT-I8 instruction format
 //
 
-//class FEXT_I816_ins_base<bits<3> _func, string asmstr,
-//                         string asmstr2, InstrItinClass itin>:
-//  FEXT_I816<_func, (outs), (ins simm16:$imm16), !strconcat(asmstr, asmstr2),
-//            [], itin>;
-
-//class FEXT_I816_ins<bits<3> _func, string asmstr,
-//                    InstrItinClass itin>:
-//  FEXT_I816_ins_base<_func, asmstr, "\t$imm16", itin>;
-
 class FEXT_I816_B_ins<bits<3> _func, string asmstr, InstrItinClass itin>:
   FEXT_I816<_func, (outs), (ins brtarget16_mips16:$imm16),
             !strconcat(asmstr, "\t$imm16"), [], itin>;
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr,
                        InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins SPPseudoReg:$pseudo, simm16:$imm16),
+  FEXT_I816<_func, (outs), (ins sp_pseudo_reg:$pseudo, simm16:$imm16),
             !strconcat(asmstr, "\t$pseudo, $imm16"), [], itin>;
-//      FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16", itin>;
 
 class FEXT_I816_RA_mem_ins<bits<3> _func, string asmstr, Operand MemOpnd,
                        InstrItinClass itin>:
-  FEXT_I816<_func, (outs), (ins RAPseudoReg:$pseudo, MemOpnd:$addr),
+  FEXT_I816<_func, (outs), (ins ra_pseudo_reg:$pseudo, MemOpnd:$addr),
             !strconcat(asmstr, "\t$pseudo, $addr"), [], itin> {
   // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
   // This instruction type uses only the 16-bit offset.
@@ -548,32 +456,22 @@ class FEXT_RI16_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
                     InstrItinClass itin>:
   FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $imm16", ImmOpnd, itin>;
 
-// TODO: Can this be combined with the one below it? This is the only place it is used.
-class FEXT_RI16R_ins_base<bits<5> _op, string asmstr, string asmstr2, 
-                          Operand ImmOpnd, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, ImmOpnd:$imm16),
-                  !strconcat(asmstr, asmstr2), [], itin>;
-
 class FEXT_RI16R_ins<bits<5> _op, string asmstr, Operand ImmOpnd,
                     InstrItinClass itin>:
-  FEXT_RI16R_ins_base<_op, asmstr, "\t$rx, $imm16", ImmOpnd, itin>;
+  FEXT_RI16<_op, (outs ), (ins CPU16Opnd:$rx, ImmOpnd:$imm16),
+                  !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_RI16_PC_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins PCPseudoReg:$pseudo, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pc_pseudo_reg:$pseudo, simm16:$imm16),
                   !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
 
 class FEXT_RI16_SP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins SPPseudoReg:$pseudo, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins sp_pseudo_reg:$pseudo, simm16:$imm16),
                   !strconcat(asmstr, "\t$rx, $pseudo, $imm16"), [], itin>;
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
                       InstrItinClass itin>:
   FEXT_RI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget16_mips16:$imm16),
-            !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
-
-class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr,
-                        InstrItinClass itin>:
-  FEXT_RI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm16, i32imm:$size),
             !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_2RI16_ins<bits<5> _op, string asmstr,
@@ -587,33 +485,51 @@ class FEXT_2RI16_ins<bits<5> _op, string asmstr,
 // EXT-RI memory instruction formats
 //
 
-// TODO: Can I remove FEXT_RI16_mem and use FEXT_RI16 instead by using "let" to set "imm16" to the offset in "addr"?
-//       Doing so might require decoders to be defined for these instructions instead of the operands, which seems silly.
 class FEXT_RI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
-  FEXT_RI16_mem<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
-             !strconcat(asmstr, "\t$rx, $addr"), [], itin>;
+  FEXT_RI16<op, (outs CPU16Opnd:$rx), (ins  MemOpnd:$addr),
+             !strconcat(asmstr, "\t$rx, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only the offset.
+  bits<16> addr;
+  let imm16 = addr;
+}
 
 class FEXT_RI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
-  FEXT_RI16_mem<op, (outs ), (ins  CPU16Opnd:$rx, MemOpnd:$addr),
-             !strconcat(asmstr, "\t$rx, $addr"), [], itin>;
+  FEXT_RI16<op, (outs ), (ins  CPU16Opnd:$rx, MemOpnd:$addr),
+             !strconcat(asmstr, "\t$rx, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses only the offset.
+  bits<16> addr;
+  let imm16 = addr;
+}
 
 //
 // EXT-RRI memory instruction formats
 //
 
-// TODO: Can I remove FEXT_RRI16_mem and use FEXT_RRI16 instead by using "let" to set "imm16" and "rx" to the offset and reg in "addr"?
-//       Doing so might require decoders to be defined for these instructions instead of the operands, which seems silly.
 class FEXT_RRI16_memload_ins<bits<5> op, string asmstr, Operand MemOpnd,
                          InstrItinClass itin>:
-  FEXT_RRI16_mem<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
-             !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
+  FEXT_RRI16<op, (outs CPU16Opnd:$ry), (ins  MemOpnd:$addr),
+             !strconcat(asmstr, "\t$ry, $addr"), [], itin>{
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses 3 bits of reg and the whole offset.
+  bits<19> addr;
+  let rx = addr{18-16};
+  let imm16 = addr{15-0};
+}
 
 class FEXT_RRI16_memstore_ins<bits<5> op, string asmstr, Operand MemOpnd,
                           InstrItinClass itin>:
-  FEXT_RRI16_mem<op, (outs ), (ins  CPU16Opnd:$ry, MemOpnd:$addr),
-             !strconcat(asmstr, "\t$ry, $addr"), [], itin>;
+  FEXT_RRI16<op, (outs ), (ins  CPU16Opnd:$ry, MemOpnd:$addr),
+             !strconcat(asmstr, "\t$ry, $addr"), [], itin> {
+  // 'addr' is produced by getMemEncoding(), which outputs (reg << 16 | offset).
+  // This instruction type uses 3 bits of reg and the whole offset.
+  bits<19> addr;
+  let rx = addr{18-16};
+  let imm16 = addr{15-0};
+}
 
 //
 //
@@ -672,7 +588,7 @@ class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
 //
 class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
        FI8_MOVR3216<(outs CPU16Opnd:$ry), (ins GPR32Opnd:$r32),
-       !strconcat(asmstr,  "\t$ry, $r32"), [], itin>;
+       !strconcat(asmstr, "\t$ry, $r32"), [], itin>;
 
 //
 // I8_MOV32R instruction format (used only by MOV32R instruction)
@@ -680,7 +596,7 @@ class FI8_MOVR3216_ins<string asmstr, InstrItinClass itin>:
 
 class FI8_MOV32R16_ins<string asmstr, InstrItinClass itin>:
   FI8_MOV32R16<(outs GPR32Opnd:$r32), (ins CPU16Opnd:$rz),
-               !strconcat(asmstr,  "\t$r32, $rz"), [], itin>;
+               !strconcat(asmstr, "\t$r32, $rz"), [], itin>;
 
 //
 // MULT
@@ -688,8 +604,6 @@ class FI8_MOV32R16_ins<string asmstr, InstrItinClass itin>:
 class FMULT16_ins<bits<5> _funct, string asmstr, InstrItinClass itin> :
   FRR16<_funct, (outs), (ins CPU16Opnd: $rx, CPU16Opnd: $ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin>;
-//  MipsPseudo16<(outs), (ins CPU16Opnd:$rx, CPU16Opnd:$ry),
-//               !strconcat(asmstr, "\t$rx, $ry"), []>;
 
 // Pseudo format for multiply
 // MULT-LO
@@ -710,12 +624,6 @@ class FC16_ins<bits<5> _funct, string asmstr, InstrItinClass itin> :
 //
 // RR-type instruction format
 //
-// TODO: This is not used. Remove it?
-class FRR16_ins<bits<5> f, string asmstr, InstrItinClass itin> :
-  FRR16<f, (outs CPU16Opnd:$rx), (ins CPU16Opnd:$ry),
-        !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
-}
-
 class FRR16R_ins<bits<5> f, string asmstr, InstrItinClass itin> :
   FRR16<f, (outs), (ins  CPU16Opnd:$rx, CPU16Opnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), [], itin> {
@@ -753,12 +661,12 @@ class FRxRxRy16_ins<bits<5> f, string asmstr,
 }
 
 class FRR16_JALRC_RaRx_ins<bits<1> nd_, string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd_, 1, 0, (outs), (ins RAPseudoReg:$pseudo, CPU16Opnd:$rx),
+  FRR16_JALRC<nd_, 1, 0, (outs), (ins ra_pseudo_reg:$pseudo, CPU16Opnd:$rx),
               !strconcat(asmstr, "\t$pseudo, $rx"), [], itin> ;
 
 let rx=0 in
 class FRR16_JALRC_RA_only_ins<bits<1> nd_, string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd_, 0, 1, (outs), (ins RAPseudoReg:$pseudo),
+  FRR16_JALRC<nd_, 0, 1, (outs), (ins ra_pseudo_reg:$pseudo),
               !strconcat(asmstr, "\t$pseudo"), [], itin> ;
 
 class FRR16_JALRC_RX_only_ins<bits<1> nd_, string asmstr,
@@ -921,13 +829,13 @@ def AddiuRxImm16:
 def AddiuRxImmX16:
   FEXT_RI16_ins<0b01001, "addiu", simm16, IIM16Alu>, ArithLogic16Defs<0>;
 
-// TODO: Is this needed? It's used in a pattern.
+// These next two are used only in patterns.
 def AddiuRxRxImm16: F2RI16_ins<0b01001, "addiu", IIM16Alu>,
   ArithLogic16Defs<0> {
   let AddedComplexity = 5;
   let isCodeGenOnly = 1;
 }
-// TODO: Is this needed? It's used in a pattern.
+
 def AddiuRxRxImmX16: FEXT_2RI16_ins<0b01001, "addiu", IIM16Alu>,
   ArithLogic16Defs<0> {
   let isCodeGenOnly = 1;
@@ -954,7 +862,8 @@ def AddiuRxRyOffMemX16:
 // Purpose: Add Immediate Unsigned Word (3-Operand, PC-Relative)
 // To add a constant to the program counter.
 //
-def AddiuRxPcImm16: FRI16_PC_ins<0b00001, "addiu", uimm8_lsl2, IIM16Alu> {
+def AddiuRxPcImm16: FRI16_Pseudo_ins<0b00001, "addiu", pc_pseudo_reg,
+                                     uimm8_lsl2, IIM16Alu> {
   let DecoderMethod = "DecodeAddiuRxPcMips16";
 }
 
@@ -967,7 +876,8 @@ def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu", IIM16Alu> {
 // Purpose: Add Immediate Unsigned Word (3-Operand, SP-Relative)
 // To add a constant to the stack pointer.
 //
-def AddiuRxSpImm16: FRI16_SP_ins<0b00000, "addiu", uimm8_lsl2, IIM16Alu> {
+def AddiuRxSpImm16: FRI16_Pseudo_ins<0b00000, "addiu", sp_pseudo_reg, 
+                                      uimm8_lsl2, IIM16Alu> {
   let Defs = [SP];
   let Uses = [SP];
   let DecoderMethod = "DecodeAddiuRxSpMips16";
@@ -1124,8 +1034,7 @@ def BtnezT8SltuX16: FEXT_T8I816_ins<"btnez", "sltu">, cbranch16;
 
 def BtnezT8SltiX16: FEXT_T8I8I16_ins<"btnez", "slti">, cbranch16;
 
-def BtnezT8SltiuX16: FEXT_T8I8I16_ins<"btnez", "sltiu">,
-  cbranch16;
+def BtnezT8SltiuX16: FEXT_T8I8I16_ins<"btnez", "sltiu">, cbranch16;
 
 //
 // Format: CMP rx, ry MIPS16e
@@ -1179,25 +1088,19 @@ def DivuRxRy16: FRR16_div_ins<0b11011, "divu", IIM16Alu> {
 // To execute a procedure call within the current 256 MB-aligned
 // region and preserve the current ISA.
 //
-
-// TODO: Are these pseudo instructions still needed?
-//       The code now has support for adding MIPS16 delay slots, which seem to be what these do.
-//       If these can go away, then we can rename "Jal16imm" to "Jal16".
-def Jal16 : FJAL16_codegen_ins<0, "jal", IIM16Alu> {
-  let hasDelaySlot = 0;  // not true, but we add the nop for now
-  let isCall = 1;
-  let Defs = [RA];
-}
-
-def JalB16 : FJALB16_codegen_ins<0, "jal", IIM16Alu>, branch16 {
-  let hasDelaySlot = 0;  // not true, but we add the nop for now
-  let isBranch=1;
-  let Defs = [RA];
-}
-
-def Jal16imm : FJAL16_ins<0, "jal", IIM16Alu> {
+def Jal16 : FJAL16_ins<0, "jal", IIM16Alu> {
   let hasDelaySlot = 1;
   let isCall = 1;
+  let Defs = [RA];
+}
+
+// This is used only in MipsConstantIslandPass.cpp for MIPS16 to generate a
+// branch that can reach further than the "b" instructions. The code assumes
+// RA is always saved and so it does not matter this this overwrites it.
+def JalB16 : FJAL16_ins<0, "jal", IIM16Alu> {
+  let hasDelaySlot = 1;
+  let isBranch = 1;
+  let isCodeGenOnly = 1;
   let Defs = [RA];
 }
 
@@ -1296,9 +1199,7 @@ def JrcRx16: FRR16_JALRC_RX_only_ins<1, "jrc", IIM16Alu> {
 // To load a byte from memory as a signed value.
 //
 def LbRxRyOffMem16: 
-  FRRI16_memload_ins<0b10000, "lb", mem16_lsl0, II_LB>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+  FRRI16_memload_ins<0b10000, "lb", mem16_lsl0, II_LB>, MayLoad;
 
 //
 // Format: LB ry, offset(rx) MIPS16e
@@ -1306,18 +1207,15 @@ def LbRxRyOffMem16:
 // To load a byte from memory as a signed value.
 //
 def LbRxRyOffMemX16:
-  FEXT_RRI16_memload_ins<0b10000, "lb", mem16ext, II_LB>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+  FEXT_RRI16_memload_ins<0b10000, "lb", mem16ext, II_LB>, MayLoad;
 
 //
 // Format: LBU ry, offset(rx) MIPS16e
 // Purpose: Load Byte Unsigned
 // To load a byte from memory as a unsigned value.
 //
-def LbuRxRyOffMem16: FRRI16_memload_ins<0b10100, "lbu", mem16_lsl0, II_LBU>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+def LbuRxRyOffMem16:
+  FRRI16_memload_ins<0b10100, "lbu", mem16_lsl0, II_LBU>, MayLoad;
 
 //
 // Format: LBU ry, offset(rx) MIPS16e
@@ -1325,18 +1223,15 @@ def LbuRxRyOffMem16: FRRI16_memload_ins<0b10100, "lbu", mem16_lsl0, II_LBU>, May
 // To load a byte from memory as a unsigned value.
 //
 def LbuRxRyOffMemX16:
-  FEXT_RRI16_memload_ins<0b10100, "lbu", mem16ext, II_LBU>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+  FEXT_RRI16_memload_ins<0b10100, "lbu", mem16ext, II_LBU>, MayLoad;
 
 //
 // Format: LH ry, offset(rx) MIPS16e
 // Purpose: Load Halfword signed
 // To load a halfword from memory as a signed value.
 //
-def LhRxRyOffMem16: FRRI16_memload_ins<0b10001, "lh", mem16_lsl1, II_LH>, MayLoad{
-//  let isCodeGenOnly = 1;
-}
+def LhRxRyOffMem16:
+  FRRI16_memload_ins<0b10001, "lh", mem16_lsl1, II_LH>, MayLoad;
 
 //
 // Format: LH ry, offset(rx) MIPS16e
@@ -1344,18 +1239,15 @@ def LhRxRyOffMem16: FRRI16_memload_ins<0b10001, "lh", mem16_lsl1, II_LH>, MayLoa
 // To load a halfword from memory as a signed value.
 //
 def LhRxRyOffMemX16:
-  FEXT_RRI16_memload_ins<0b10001, "lh", mem16ext, II_LH>, MayLoad{
-//  let isCodeGenOnly = 1;
-}
+  FEXT_RRI16_memload_ins<0b10001, "lh", mem16ext, II_LH>, MayLoad;
 
 //
 // Format: LHU ry, offset(rx) MIPS16e
 // Purpose: Load Halfword unsigned
 // To load a halfword from memory as an unsigned value.
 //
-def LhuRxRyOffMem16: FRRI16_memload_ins<0b10101, "lhu", mem16_lsl1, II_LHU>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+def LhuRxRyOffMem16:
+  FRRI16_memload_ins<0b10101, "lhu", mem16_lsl1, II_LHU>, MayLoad;
 
 //
 // Format: LHU ry, offset(rx) MIPS16e
@@ -1363,9 +1255,7 @@ def LhuRxRyOffMem16: FRRI16_memload_ins<0b10101, "lhu", mem16_lsl1, II_LHU>, May
 // To load a halfword from memory as an unsigned value.
 //
 def LhuRxRyOffMemX16:
-  FEXT_RRI16_memload_ins<0b10101, "lhu", mem16ext, II_LHU>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+  FEXT_RRI16_memload_ins<0b10101, "lhu", mem16ext, II_LHU>, MayLoad;
 
 //
 // Format: LI rx, immediate MIPS16e
@@ -1390,9 +1280,8 @@ def LiRxImmAlignX16: FEXT_RI16_ins<0b01101, ".align 2\n\tli", uimm16, IIM16Alu> 
 // Purpose: Load Word
 // To load a word from memory as a signed value.
 //
-def LwRxRyOffMem16: FRRI16_memload_ins<0b10011, "lw", mem16_lsl2, II_LW>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+def LwRxRyOffMem16:
+  FRRI16_memload_ins<0b10011, "lw", mem16_lsl2, II_LW>, MayLoad;
 
 //
 // Format: LW ry, offset(rx) MIPS16e
@@ -1400,9 +1289,7 @@ def LwRxRyOffMem16: FRRI16_memload_ins<0b10011, "lw", mem16_lsl2, II_LW>, MayLoa
 // To load a word from memory as a signed value.
 //
 def LwRxRyOffMemX16:
-  FEXT_RRI16_memload_ins<0b10011, "lw", mem16ext, II_LW>, MayLoad {
-//  let isCodeGenOnly = 1;
-}
+  FEXT_RRI16_memload_ins<0b10011, "lw", mem16ext, II_LW>, MayLoad;
 
 //
 // Format: LW rx, offset(sp) MIPS16e
@@ -1418,9 +1305,9 @@ def LwRxSpImm16: FRI16_memload_ins<0b10010, "lw", mem16_sp, II_LW>, MayLoad {
 // Purpose: Load Word (SP-Relative, Extended)
 // To load an SP-relative word from memory as a signed value.
 //
-//def LwRxSpImmX16: FEXT_RI16_memload_ins<0b10010, "lw", mem16sp, II_LW>, MayLoad;
-def LwRxSpImmX16: FEXT_RI16_memload_ins<0b10010, "lw", mem16ext_sp, II_LW>, MayLoad {
-  let Uses = [SP];
+def LwRxSpImmX16:
+  FEXT_RI16_memload_ins<0b10010, "lw", mem16ext_sp, II_LW>, MayLoad {
+    let Uses = [SP];
 }
 
 //
@@ -1428,18 +1315,15 @@ def LwRxSpImmX16: FEXT_RI16_memload_ins<0b10010, "lw", mem16ext_sp, II_LW>, MayL
 // Purpose: Load Word (PC-Relative)
 // To load a PC-relative word from memory as a signed value.
 //
-//def LwRxPcTcp16: FRI16_TCP_ins<0b10110, "lw", II_LW>, MayLoad;
 def LwRxPcImm16: FRI16_memload_ins<0b10110, "lw", mem16_pc, II_LW>, MayLoad;
-
-// TODO: Can the FRI16_TCP_ins and FEXT_RI16_TCP_ins types be removed?
 
 //
 // Format: LW rx, offset(pc) MIPS16e
 // Purpose: Load Word (PC-Relative, Extended)
 // To load a PC-relative word from memory as a signed value.
 //
-//def LwRxPcTcpX16: FEXT_RI16_TCP_ins<0b10110, "lw", II_LW>, MayLoad;
-def LwRxPcImmX16: FEXT_RI16_memload_ins<0b10110, "lw", mem16ext_pc, II_LW>, MayLoad;
+def LwRxPcImmX16:
+  FEXT_RI16_memload_ins<0b10110, "lw", mem16ext_pc, II_LW>, MayLoad;
 
 //
 // Format: MOVE r32, rz MIPS16e
@@ -1486,7 +1370,6 @@ def Mflo16: FRR16_M_ins<0b10010, "mflo", IIM16Alu> {
 // Purpose: Multiply Word
 // To multiply 32-bit signed integers.
 //
-//def MultRxRy16:  FMULT16_ins<"mult"> {
 def MultRxRy16:  FMULT16_ins<0b11000, "mult", IIM16Alu> {
   let isCommutable = 1;
   let hasSideEffects = 0;
@@ -1498,7 +1381,6 @@ def MultRxRy16:  FMULT16_ins<0b11000, "mult", IIM16Alu> {
 // Purpose: Multiply Unsigned Word
 // To multiply 32-bit unsigned integers.
 //
-//def MultuRxRy16: FMULT16_ins<"multu"> {
 def MultuRxRy16: FMULT16_ins<0b11001, "multu", IIM16Alu> {
   let isCommutable = 1;
   let hasSideEffects = 0;
@@ -1556,7 +1438,6 @@ def OrRxRxRy16: FRxRxRy16_ins<0b01101, "or", IIM16Alu>, ArithLogic16Defs<1>;
 def Restore16:
   FI8_SVRS16<0b0, (outs), (ins svrs16:$svrs_ops),
              "restore\t$svrs_ops", [], II_RESTORE >, MayLoad {
-//  let isCodeGenOnly = 1;
   let Defs = [SP];
   let Uses = [SP];
 }
@@ -1565,7 +1446,6 @@ def Restore16:
 def RestoreX16:
   FEXT_I8_SVRS16<0b0, (outs), (ins svrsExt:$svrs_ops),
                  "restore\t$svrs_ops", [], II_RESTORE >, MayLoad {
-//  let isCodeGenOnly = 1;
   let Defs = [SP];
   let Uses = [SP];
 }
@@ -1580,7 +1460,6 @@ def RestoreX16:
 def Save16:
   FI8_SVRS16<0b1, (outs), (ins svrs16:$svrs_ops),
              "save\t$svrs_ops", [], II_SAVE >, MayStore {
-//  let isCodeGenOnly = 1;
   let Uses = [SP];
   let Defs = [SP];
 }
@@ -1588,7 +1467,6 @@ def Save16:
 def SaveX16:
   FEXT_I8_SVRS16<0b1, (outs), (ins svrsExt:$svrs_ops),
                  "save\t$svrs_ops", [], II_SAVE >, MayStore {
-//  let isCodeGenOnly = 1;
   let Uses = [SP];
   let Defs = [SP];
 }
@@ -1598,7 +1476,8 @@ def SaveX16:
 // Purpose: Store Byte
 // To store a byte to memory.
 //
-def SbRxRyOffMem16: FRRI16_memstore_ins<0b11000, "sb", mem16_lsl0, II_SB>, MayStore;
+def SbRxRyOffMem16:
+  FRRI16_memstore_ins<0b11000, "sb", mem16_lsl0, II_SB>, MayStore;
 
 //
 // Format: SB ry, offset(rx) MIPS16e
@@ -1915,14 +1794,16 @@ def SubuRxRyRz16: FRRR16_ins<0b11, "subu", IIM16Alu>, ArithLogic16Defs<0>;
 // Purpose: Store Word
 // To store a word to memory.
 //
-def SwRxRyOffMem16: FRRI16_memstore_ins<0b11011, "sw", mem16_lsl2, II_SW>, MayStore;
+def SwRxRyOffMem16:
+  FRRI16_memstore_ins<0b11011, "sw", mem16_lsl2, II_SW>, MayStore;
 
 //
 // Format: SW ry, offset(rx) MIPS16e
 // Purpose: Store Word (Extended)
 // To store a word to memory.
 //
-def SwRxRyOffMemX16: FEXT_RRI16_memstore_ins<0b11011, "sw", mem16ext, II_SW>, MayStore;
+def SwRxRyOffMemX16:
+  FEXT_RRI16_memstore_ins<0b11011, "sw", mem16ext, II_SW>, MayStore;
 
 //
 // Format: SW rx, offset(sp) MIPS16e
@@ -1938,9 +1819,9 @@ def SwRxSpImm16: FRI16_memstore_ins<0b11010, "sw", mem16_sp, II_SW>, MayStore {
 // Purpose: Store Word rx (SP-Relative, Extended)
 // To store an SP-relative word to memory.
 //
-//def SwRxSpImmX16: FEXT_RI16_memstore_ins<0b11010, "sw", mem16sp, II_SW>, MayStore;
-def SwRxSpImmX16: FEXT_RI16_memstore_ins<0b11010, "sw", mem16ext_sp, II_SW>, MayStore {
-  let Uses = [SP];
+def SwRxSpImmX16:
+  FEXT_RI16_memstore_ins<0b11010, "sw", mem16ext_sp, II_SW>, MayStore {
+    let Uses = [SP];
 }
 
 //
@@ -1958,9 +1839,10 @@ def SwRaSpImm16: FI816_RA_mem_ins<0b010, "sw", mem16_sp, II_SW>, MayStore {
 // Purpose: Store Word ra (SP-Relative, Extended)
 // To store register ra SP-relative to memory.
 //
-def SwRaSpImmX16: FEXT_I816_RA_mem_ins<0b010, "sw", mem16ext_sp, II_SW>, MayStore {
-  let Uses = [RA, SP];
-  let DecoderMethod = "DecodeSwRaSpMips16";
+def SwRaSpImmX16:
+  FEXT_I816_RA_mem_ins<0b010, "sw", mem16ext_sp, II_SW>, MayStore {
+    let Uses = [RA, SP];
+    let DecoderMethod = "DecodeSwRaSpMips16";
 }
 
 //
@@ -2227,7 +2109,6 @@ def: Mips16Pat
 
 def: UncondBranch16_pat<br, Bimm16>;
 
-// TODO: Are then sign and zero extending 16-bit values? Wouldn't SEH and ZEH do it?
 // Small immediates
 def: Mips16Pat<(i32 immSExt16:$in),
                (AddiuRxRxImmX16 (MoveR3216 ZERO), immSExt16:$in)>;
@@ -2561,7 +2442,6 @@ class Wrapper16Pat<SDNode node, Instruction ADDiuOp, RegisterClass RC>:
 def : Wrapper16Pat<tglobaladdr, AddiuRxRxImmX16, CPU16Regs>;
 def : Wrapper16Pat<tglobaltlsaddr, AddiuRxRxImmX16, CPU16Regs>;
 
-// TODO: Non-X short versions here too?
 def : Mips16Pat<(i32 (extloadi8   addr16:$src)),
                 (LbuRxRyOffMemX16  addr16:$src)>;
 def : Mips16Pat<(i32 (extloadi16  addr16:$src)),
