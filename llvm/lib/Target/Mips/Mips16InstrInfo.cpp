@@ -417,7 +417,7 @@ unsigned Mips16InstrInfo::loadImmediate(unsigned FrameReg, int64_t Imm,
         .addReg(Reg);
   }
   else
-    BuildMI(MBB, II, DL, get(Mips::  AdduRxRyRz16), Reg).addReg(FrameReg)
+    BuildMI(MBB, II, DL, get(Mips::AdduRxRyRz16), Reg).addReg(FrameReg)
       .addReg(Reg, RegState::Kill);
   if (FirstRegSaved || SecondRegSaved) {
     II = std::next(II);
@@ -460,7 +460,7 @@ const MCInstrDesc &Mips16InstrInfo::AddiuSpImm(int64_t Imm) const {
 void Mips16InstrInfo::BuildAddiuSpImm
   (MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int64_t Imm) const {
   DebugLoc DL;
-  BuildMI(MBB, I, DL, AddiuSpImm(Imm)).addImm(Imm);
+  BuildMI(MBB, I, DL, AddiuSpImm(Imm), Mips::SP).addImm(Imm);
 }
 
 const MipsInstrInfo *llvm::createMips16InstrInfo(const MipsSubtarget &STI) {

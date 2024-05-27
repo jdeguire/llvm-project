@@ -12,7 +12,7 @@ entry:
   %div = sdiv i32 %0, %1
   store i32 %div, ptr @kkkk, align 4
   %rem = srem i32 %0, %1
-; 16:	div	$zero, ${{[0-9]+}}, ${{[0-9]+}}
+; 16:	div	${{[0-9]+}}, ${{[0-9]+}}
 ; 16: 	mflo	${{[0-9]+}}
 ; 16: 	mfhi	${{[0-9]+}}
   store i32 %rem, ptr @llll, align 4

@@ -25,7 +25,7 @@ entry:
 ; SR32:  .set noreorder
 ; SR32:  .set nomacro
 ; SR32:  .set noat
-; SR:	save 	$ra, 24 # 16 bit inst
+; SR:	save 	$ra, 24
 ; PE:    .ent main
 ; PE:	li	$[[T1:[0-9]+]], %hi(_gp_disp)
 ; PE-NEXT: 	addiu	$[[T2:[0-9]+]], $pc, %lo(_gp_disp)
@@ -35,8 +35,8 @@ entry:
 ; C1:	addiu	${{[0-9]+}}, %lo($.str)
 ; C2:	move	$25, ${{[0-9]+}}
 ; C1:	move 	$gp, ${{[0-9]+}}
-; C1:	jalrc 	${{[0-9]+}}
-; SR:	restore $ra,	24 # 16 bit inst
+; C1:	jalrc $ra, ${{[0-9]+}}
+; SR:	restore $ra,	24
 ; PE:	li	$2, 0
 ; PE:	jrc 	$ra
 

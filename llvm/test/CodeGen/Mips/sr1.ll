@@ -12,8 +12,8 @@ entry:
   call void @x(ptr %c)
   ret void
 ; CHECK: 	.ent	foo1
-; CHECK: 	save	$16, $17, $ra, [[FS:[0-9]+]]  # 16 bit inst
-; CHECK: 	restore	$16, $17, $ra, [[FS]] # 16 bit inst
+; CHECK: 	save	$16, $17, $ra, [[FS:[0-9]+]]  
+; CHECK: 	restore	$16, $17, $ra, [[FS]] 
 ; CHECK: 	.end	foo1
 }
 
@@ -43,8 +43,8 @@ entry:
 ; CHECK: 	restore	$16, $17, $ra, $18, [[FS]]
 ; CHECK: 	.end	foo3
 ; NEG: 	.ent	foo3
-; NEG-NOT: 	save	$16, $17, $ra, $18, {{[0-9]+}} # 16 bit inst
-; NEG-NOT: 	restore	$16, $17, $ra, $18, {{[0-9]+}} # 16 bit inst
+; NEG-NOT: 	save	$16, $17, $ra, $18, {{[0-9]+}} 
+; NEG-NOT: 	restore	$16, $17, $ra, $18, {{[0-9]+}} 
 ; NEG: 	.end	foo3
 }
 

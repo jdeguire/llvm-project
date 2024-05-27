@@ -26,6 +26,6 @@ entry:
   ret void
 }
 ; 16:	save	$ra, 2040
-; 16:	addiu	$sp, -40 # 16 bit inst
-; 16:	addiu	$sp, 40 # 16 bit inst
+; 16:	addiu	$sp, -40 
+; 16:	addiu	$sp, 40 
 ; 16:	restore	$ra, 2040

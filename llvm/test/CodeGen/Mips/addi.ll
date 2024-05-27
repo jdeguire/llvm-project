@@ -20,8 +20,8 @@ entry:
   %3 = load i32, ptr @l, align 4
   %sub2 = sub nsw i32 %3, 10000
   store i32 %sub2, ptr @l, align 4
-; 16: 	addiu	${{[0-9]+}}, 5	# 16 bit inst
-; 16: 	addiu	${{[0-9]+}}, -5	# 16 bit inst
+; 16: 	addiu	${{[0-9]+}}, 5	
+; 16: 	addiu	${{[0-9]+}}, -5	
 ; 16: 	addiu	${{[0-9]+}}, 10000
 ; 16: 	addiu	${{[0-9]+}}, -10000
   ret void

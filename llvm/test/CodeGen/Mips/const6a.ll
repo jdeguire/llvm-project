@@ -1,6 +1,4 @@
-; RUN: llc -mtriple=mipsel-linux-gnu -march=mipsel -mattr=mips16 -mattr=+soft-float -mips16-hard-float -relocation-model=pic -mips16-constant-islands   < %s | FileCheck %s -check-prefix=load-relax1
-
-; RUN: llc -mtriple=mipsel-linux-gnu -march=mipsel -mattr=mips16 -mattr=+soft-float -mips16-hard-float -relocation-model=pic -mips16-constant-islands   < %s | FileCheck %s -check-prefix=load-relax
+; RUN: llc -mtriple=mipsel-linux-gnu -march=mipsel -mattr=mips16 -mattr=+soft-float -mips16-hard-float -relocation-model=pic -mips16-constant-islands   < %s | llvm-mc -arch=mipsel -mattr=+mips16 -show-inst | FileCheck %s -check-prefix=load-relax
 
 ; ModuleID = 'const6a.c'
 target datalayout = "E-p:32:32:32-i1:8:8-i8:8:32-i16:16:32-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-n32-S64"
@@ -12,8 +10,7 @@ target triple = "mips--linux-gnu"
 define void @t() #0 {
 entry:
   store i32 -559023410, ptr @i, align 4
-; load-relax-NOT: 	lw	${{[0-9]+}}, $CPI0_0 # 16 bit inst
-; load-relax1: lw	${{[0-9]+}}, $CPI0_0
+; load-relax: lw	${{[0-9]+}}, $CPI0_0        # <MCInst #{{[0-9]+}} LwRxRyOffMemX16
 ; load-relax:	jrc	 $ra
 ; load-relax:	.p2align	2
 ; load-relax: $CPI0_0:

@@ -52,7 +52,7 @@ if.end:                                           ; preds = %if.else, %if.then
 }
 
 ; ci:	.ent	x1
-; ci:	bnez	$3, $BB1_1  # 16 bit inst
+; ci:	bnez	$3, $BB1_1  
 ; ci:	jal	$BB1_2	# branch
 ; ci:	nop
 ; ci: $BB1_1:
@@ -105,7 +105,7 @@ if.end:                                           ; preds = %if.else, %if.then
 }
 
 ; ci:	.ent	y1
-; ci:	bnez	$2, $BB3_1  # 16 bit inst
+; ci:	bnez	$2, $BB3_1  
 ; ci:	jal	$BB3_2	# branch
 ; ci:	nop
 ; ci: $BB3_1:
@@ -160,7 +160,7 @@ if.end:                                           ; preds = %if.else, %if.then
 }
 
 ; ci:	.ent	z1
-; ci:	bteqz	$BB5_1  # 16 bit inst
+; ci:	bteqz	$BB5_1  
 ; ci:	jal	$BB5_2	# branch
 ; ci:	nop
 ; ci: $BB5_1:
@@ -209,7 +209,7 @@ if.end:                                           ; preds = %if.then, %entry
 }
 
 ; ci:	.ent	z4
-; ci:	btnez	$BB7_1  # 16 bit inst
+; ci:	btnez	$BB7_1  
 ; ci:	jal	$BB7_3	# branch
 ; ci:	nop
 ; ci: $BB7_1:

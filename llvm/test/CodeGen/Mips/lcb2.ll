@@ -24,7 +24,7 @@ if.end:                                           ; preds = %if.then, %entry
 ; lcb: 	.ent	bnez
 ; lcbn:	.ent	bnez
 ; lcb:	bnez	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}
-; lcbn-NOT: bnez	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}  # 16 bit inst
+; lcbn-NOT: bnez	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}  
 ; lcb: 	.end	bnez
 ; lcbn:	.end	bnez
 
@@ -52,7 +52,7 @@ if.end:                                           ; preds = %if.else, %if.then
 ; lcb: 	.ent	beqz
 ; lcbn:	.ent	beqz
 ; lcb:	beqz	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}
-; lcbn-NOT: beqz	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}  # 16 bit inst
+; lcbn-NOT: beqz	${{[0-9]+}}, $BB{{[0-9]+}}_{{[0-9]+}}  
 ; lcb: 	.end	beqz
 ; lcbn:	.end	beqz
 
@@ -82,7 +82,7 @@ if.end:                                           ; preds = %if.else, %if.then
 ; lcb: 	.ent	bteqz
 ; lcbn:	.ent	bteqz
 ; lcb:	btnez	$BB{{[0-9]+}}_{{[0-9]+}}
-; lcbn-NOT: btnez	$BB{{[0-9]+}}_{{[0-9]+}} # 16 bit inst
+; lcbn-NOT: btnez	$BB{{[0-9]+}}_{{[0-9]+}} 
 ; lcb: 	.end	bteqz
 ; lcbn:	.end	bteqz
 
@@ -109,9 +109,9 @@ if.end:                                           ; preds = %if.then, %entry
 ; lcb: 	.ent	btz
 ; lcbn:	.ent	btz
 ; lcb:	bteqz	$BB{{[0-9]+}}_{{[0-9]+}}
-; lcbn-NOT: bteqz	$BB{{[0-9]+}}_{{[0-9]+}} # 16 bit inst
+; lcbn-NOT: bteqz	$BB{{[0-9]+}}_{{[0-9]+}} 
 ; lcb:	btnez	$BB{{[0-9]+}}_{{[0-9]+}}
-; lcbn-NOT: btnez	$BB{{[0-9]+}}_{{[0-9]+}} # 16 bit inst
+; lcbn-NOT: btnez	$BB{{[0-9]+}}_{{[0-9]+}} 
 ; lcb: 	.end	btz
 ; lcbn:	.end	btz
 

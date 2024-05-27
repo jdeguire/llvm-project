@@ -23,7 +23,7 @@ if.else:                                          ; preds = %entry
 if.end:                                           ; preds = %if.else, %if.then
   ret i32 0
 ; lcb:	bnez	$2, $BB0_2
-; lcb:	b	$BB0_1 # 16 bit inst
+; lcb:	b	$BB0_1
 ; lcb: $BB0_1:                                 # %if.then
 }
 
@@ -47,7 +47,7 @@ if.end:                                           ; preds = %if.else, %if.then
   ret i32 0
 }
 
-; lcb:	beqz	$2, $BB1_1  # 16 bit inst
+; lcb:	beqz	$2, $BB1_1
 ; lcb:	jal	$BB1_2	# branch
 ; lcb: $BB1_1:                                 # %if.then
 
