@@ -2,7 +2,7 @@
 # RUN: FileCheck %s < %t1
 
   .set  noat
-  lwc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: invalid operand for instruction
-  swc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: invalid operand for instruction
-  ldc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: invalid operand for instruction
-  sdc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: invalid operand for instruction
+  lwc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled 
+  swc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled 
+  ldc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled 
+  sdc3  $4, 0($5)  # CHECK: :{{[0-9]+}}:{{[0-9]+}}: error: instruction requires a CPU feature not currently enabled 

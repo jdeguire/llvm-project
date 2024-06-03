@@ -243,7 +243,7 @@ void MipsAsmPrinter::emitInstruction(const MachineInstr *MI) {
     return;
   }
 
-  if (EmitJalrReloc &&
+  if (EmitJalrReloc && !Subtarget->inMips16Mode() &&
       (MI->isReturn() || MI->isCall() || MI->isIndirectBranch())) {
     emitDirectiveRelocJalr(*MI, OutContext, TM, *OutStreamer, *Subtarget);
   }

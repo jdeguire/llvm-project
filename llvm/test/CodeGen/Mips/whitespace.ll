@@ -11,7 +11,7 @@
 
 define i32 @main() nounwind {
 entry:
-; 16: jalrc	${{[0-9]+}}
+; 16: jalrc	$ra, ${{[0-9]+}}
 ; 16: jrc	${{[0-9]+}}
 ; 16: jrc	$ra
   %puts = tail call i32 @puts(ptr @str)

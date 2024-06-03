@@ -48,7 +48,7 @@ if.end:                                           ; preds = %if.else, %if.then
 }
 
 ; lcb:	beqz	$2, $BB1_1
-; lcb:	jal	$BB1_2	# branch
+; lcb:	jal	$BB1_2
 ; lcb: $BB1_1:                                 # %if.then
 
 attributes #0 = { nounwind "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }

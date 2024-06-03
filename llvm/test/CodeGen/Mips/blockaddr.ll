@@ -56,8 +56,8 @@ entry:
 ; STATIC-MIPS16: li   $[[R0:[0-9]+]], %hi($tmp[[L0:[0-9]+]])
 ; STATIC-MIPS16: sll  $[[R1:[0-9]+]], $[[R0]], 16
 ; STATIC-MIPS16: li   $[[R2:[0-9]+]], %lo($tmp[[L0]])
-; STATIC-MIPS16: addu $[[R3:[0-9]+]], $[[R1]], $[[R2]]
 ; STATIC-MIPS16: jal	dummy
+; STATIC-MIPS16: addu $[[R3:[0-9]+]], $[[R1]], $[[R2]]
 
 define void @f() nounwind {
 entry:

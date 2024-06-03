@@ -447,7 +447,8 @@ unsigned Mips16InstrInfo::getAnalyzableBrOpc(unsigned Opc) const {
 void Mips16InstrInfo::ExpandRetRA16(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator I,
                                   unsigned Opc) const {
-  BuildMI(MBB, I, I->getDebugLoc(), get(Opc));
+  BuildMI(MBB, I, I->getDebugLoc(), get(Opc))
+    .addReg(Mips::RA, RegState::Undef);
 }
 
 const MCInstrDesc &Mips16InstrInfo::AddiuSpImm(int64_t Imm) const {

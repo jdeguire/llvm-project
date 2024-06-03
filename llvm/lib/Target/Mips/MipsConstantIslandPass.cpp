@@ -745,14 +745,14 @@ initializeFunctionInfo(const std::vector<MachineInstr*> &CPEMIs) {
           switch (Opc) {
           default:
             llvm_unreachable("Unknown addressing mode for CP reference!");
-          case Mips::LwRxPcImm16:
+          case Mips::LwRxPcTcp16:
             Bits = 8;
             Scale = 4;
-            LongFormOpcode = Mips::LwRxPcImmX16;
+            LongFormOpcode = Mips::LwRxPcTcpX16;
             LongFormBits = 14;
             LongFormScale = 1;
             break;
-          case Mips::LwRxPcImmX16:
+          case Mips::LwRxPcTcpX16:
             Bits = 14;
             Scale = 1;
             NegOk = true;
@@ -1502,6 +1502,7 @@ MipsConstantIslands::fixupUnconditionalBr(ImmBranch &Br) {
   if (isBBInRange(MI, DestBB, BimmX16MaxDisp)) {
     Br.MaxDisp = BimmX16MaxDisp;
     MI->setDesc(TII->get(Mips::BimmX16));
+    BBInfo[MBB->getNumber()].Size += 2;
   }
   else {
     // need to give the math a more careful look here
@@ -1518,8 +1519,12 @@ MipsConstantIslands::fixupUnconditionalBr(ImmBranch &Br) {
     DestBB->setAlignment(Align(4));
     Br.MaxDisp = ((1<<24)-1) * 2;
     MI->setDesc(TII->get(Mips::JalB16));
+    MachineInstr* DelaySlotNop = 
+      BuildMI(MBB, DebugLoc(), TII->get(Mips::Move32R16), Mips::ZERO)
+        .addReg(Mips::S0);
+    DelaySlotNop->bundleWithPred();
+    BBInfo[MBB->getNumber()].Size += 4;
   }
-  BBInfo[MBB->getNumber()].Size += 2;
   adjustBBOffsetsAfter(MBB);
   HasFarJump = true;
   ++NumUBrFixed;
@@ -1652,7 +1657,7 @@ void MipsConstantIslands::prescanForConstants() {
             unsigned index = MCP->getConstantPoolIndex(C, Align(4));
             I->getOperand(2).ChangeToImmediate(index);
             LLVM_DEBUG(dbgs() << "constant island constant " << *I << "\n");
-            I->setDesc(TII->get(Mips::LwRxPcImm16));
+            I->setDesc(TII->get(Mips::LwRxPcTcp16));
             I->removeOperand(1);
             I->removeOperand(1);
             I->addOperand(MachineOperand::CreateCPI(index, 0));

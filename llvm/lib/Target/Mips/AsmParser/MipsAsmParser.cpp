@@ -585,7 +585,7 @@ public:
   }
 
   bool isJalrRelocAvailable(const MCExpr *JalExpr) {
-    if (!EmitJalrReloc)
+    if (!EmitJalrReloc || inMips16Mode())
       return false;
     MCValue Res;
     if (!JalExpr->evaluateAsRelocatable(Res, nullptr, nullptr))

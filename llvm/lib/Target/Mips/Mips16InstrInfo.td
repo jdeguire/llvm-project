@@ -19,6 +19,7 @@ def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 // The number matches the value in MipsRegisterInfo::MipsPtrClass.
 def ptr_cpu16_rc : PointerLikeRegClass<4>;
 
+def pcrel16 : Operand<i32>;
 
 // Some MIPS16 instructions, such as "addiu", have operands that look like
 // registers but are not encoded as normal operands. Instead, they determine
@@ -293,6 +294,11 @@ class FRI16_ins<bits<5> op, string asmstr, Operand ImmOpnd, InstrItinClass itin>
   FRI16<op, (outs CPU16Opnd:$rx), (ins ImmOpnd:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
 
+class FRI16_TCP_ins<bits<5> _op, string asmstr,
+                    InstrItinClass itin>:
+  FRI16<_op, (outs CPU16Opnd:$rx), (ins pcrel16:$imm8, i32imm:$size),
+            !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
+
 class FRI16R_ins<bits<5> op, string asmstr, InstrItinClass itin>:
   FRI16<op, (outs), (ins CPU16Opnd:$rx, uimm8:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8"), [], itin>;
@@ -474,6 +480,11 @@ class FEXT_RI16_SP_ins<bits<5> _op, string asmstr, InstrItinClass itin>:
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr,
                       InstrItinClass itin>:
   FEXT_RI16<_op, (outs), (ins  CPU16Opnd:$rx, brtarget16_mips16:$imm16),
+            !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
+
+class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr,
+                        InstrItinClass itin>:
+  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm16, i32imm:$size),
             !strconcat(asmstr, "\t$rx, $imm16"), [], itin>;
 
 class FEXT_2RI16_ins<bits<5> _op, string asmstr,
@@ -1099,7 +1110,7 @@ def Jal16 : FJAL16_ins<0, "jal", IIM16Alu> {
 // This is used only in MipsConstantIslandPass.cpp for MIPS16 to generate a
 // branch that can reach further than the "b" instructions. The code assumes
 // RA is always saved and so it does not matter this this overwrites it.
-def JalB16 : FJAL16_ins<0, "jal", IIM16Alu> {
+def JalB16 : FJAL16_ins<0, "jal", IIM16Alu>, branch16 {
   let hasDelaySlot = 1;
   let isBranch = 1;
   let isCodeGenOnly = 1;
@@ -1159,7 +1170,6 @@ def JrRa16: FRR16_JALRC_RA_only_ins<0, "jr", IIM16Alu> {
   let isTerminator = 1;
   let isBarrier = 1;
   let isReturn = 1;
-  let Uses = [RA];
   let DecoderMethod = "DecodeJrRaMips16";
 }
 
@@ -1170,7 +1180,6 @@ def JrcRa16: FRR16_JALRC_RA_only_ins<1, "jrc", IIM16Alu> {
   let isTerminator = 1;
   let isBarrier=1;
   let isReturn=1;
-  let Uses = [RA];
   let DecoderMethod = "DecodeJrRaMips16";
 }
 
@@ -1326,6 +1335,18 @@ def LwRxPcImm16: FRI16_memload_ins<0b10110, "lw", mem16_pc, II_LW>, MayLoad;
 def LwRxPcImmX16:
   FEXT_RI16_memload_ins<0b10110, "lw", mem16ext_pc, II_LW>, MayLoad;
 
+
+// These are used in MipsConstantIslandPass.cpp to create a PC-relative load
+// from a nearby constant island.
+// FIXME: Could these go away when support for MIPS16 relocations is added?
+//        Would that let the above LwRxPcImm(X)16 versions handle this?
+def LwRxPcTcp16: FRI16_TCP_ins<0b10110, "lw", II_LW>, MayLoad {
+  let isCodeGenOnly = 1;
+}
+def LwRxPcTcpX16: FEXT_RI16_TCP_ins<0b10110, "lw", II_LW>, MayLoad {
+  let isCodeGenOnly = 1;
+}
+
 //
 // Format: MOVE r32, rz MIPS16e
 // Purpose: Move
@@ -1437,7 +1458,7 @@ def OrRxRxRy16: FRxRxRy16_ins<0b01101, "or", IIM16Alu>, ArithLogic16Defs<1>;
 //
 
 def Restore16:
-  FI8_SVRS16<0b0, (outs), (ins svrs16:$svrs_ops),
+  FI8_SVRS16<0b0, (outs), (ins svrs16:$svrs_ops, variable_ops),
              "restore\t$svrs_ops", [], II_RESTORE >, MayLoad {
   let Defs = [SP];
   let Uses = [SP];
@@ -1445,7 +1466,7 @@ def Restore16:
 
 
 def RestoreX16:
-  FEXT_I8_SVRS16<0b0, (outs), (ins svrsExt:$svrs_ops),
+  FEXT_I8_SVRS16<0b0, (outs), (ins svrsExt:$svrs_ops, variable_ops),
                  "restore\t$svrs_ops", [], II_RESTORE >, MayLoad {
   let Defs = [SP];
   let Uses = [SP];
@@ -1459,14 +1480,14 @@ def RestoreX16:
 // saving return address and static registers, and adjusting stack
 //
 def Save16:
-  FI8_SVRS16<0b1, (outs), (ins svrs16:$svrs_ops),
+  FI8_SVRS16<0b1, (outs), (ins svrs16:$svrs_ops, variable_ops),
              "save\t$svrs_ops", [], II_SAVE >, MayStore {
   let Uses = [SP];
   let Defs = [SP];
 }
 
 def SaveX16:
-  FEXT_I8_SVRS16<0b1, (outs), (ins svrsExt:$svrs_ops),
+  FEXT_I8_SVRS16<0b1, (outs), (ins svrsExt:$svrs_ops, variable_ops),
                  "save\t$svrs_ops", [], II_SAVE >, MayStore {
   let Uses = [SP];
   let Defs = [SP];

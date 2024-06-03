@@ -23,8 +23,8 @@ entry:
 ; load-relax:	.4byte	3735943886
 ; load-relax:	.end	t
 
-; no-load-relax: lw	${{[0-9]+}}, $CPI0_1	
-; no-load-relax:	jalrc 	${{[0-9]+}}
+; no-load-relax: lw	${{[0-9]+}}, $CPI0_1
+; no-load-relax:	jalrc $ra, ${{[0-9]+}}
 ; no-load-relax:	b	$BB0_2
 ; no-load-relax:	.p2align	2
 ; no-load-relax: $CPI0_1:

@@ -215,11 +215,7 @@ let Namespace = "Mips" in {
   def COP3#I : MipsReg<I, ""#I>;
 
   // PC register
-  def PC : Register<"pc"> {
-    // The program counter is not accessible on MIPS like a normal register.
-    // This is used only to encode some PC-relative MIPS16 instructions.
-    let isArtificial = true;
-  }
+  def PC : Register<"pc">;
 
   // Hardware registers
   def HWR0 : MipsReg<0, "hwr_cpunum">;
@@ -383,13 +379,10 @@ def CPU16RegsPlusSP : RegisterClass<"Mips", [i32], 32, (add
   SP)>;
 
 def CPURAReg : RegisterClass<"Mips", [i32], 32, (add RA)>, Unallocatable;
-//def CPURAReg : RegisterClass<"Mips", [i32], 32, (add RA)>;
 
 def CPUSPReg : RegisterClass<"Mips", [i32], 32, (add SP)>, Unallocatable;
-//def CPUSPReg : RegisterClass<"Mips", [i32], 32, (add SP)>;
 
 def CPUPCReg : RegisterClass<"Mips", [i32], 32, (add PC)>, Unallocatable;
-// def CPUPCReg : RegisterClass<"Mips", [i32], 32, (add PC)>;
 
 // 64bit fp:
 // * FGR64  - 32 64-bit registers

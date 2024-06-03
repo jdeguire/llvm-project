@@ -643,7 +643,8 @@ def : InstRW<[GenericWriteLoad], (instrs Restore16, RestoreX16,
                                   LhuRxRyOffMem16, LhuRxRyOffMemX16,
                                   LwRxRyOffMem16, LwRxRyOffMemX16,
                                   LwRxSpImm16, LwRxSpImmX16, 
-                                  LwRxPcImm16, LwRxPcImmX16)>;
+                                  LwRxPcImm16, LwRxPcImmX16,
+                                  LwRxPcTcp16, LwRxPcTcpX16)>;
 
 def : InstRW<[GenericWriteStore], (instrs Save16, SaveX16, 
                                    SbRxRyOffMem16, SbRxRyOffMemX16,
