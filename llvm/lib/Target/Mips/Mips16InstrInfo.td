@@ -674,7 +674,7 @@ class FRxRxRy16_ins<bits<5> f, string asmstr,
 }
 
 class FRR16_JALRC_RaRx_ins<bits<1> nd_, string asmstr, InstrItinClass itin>:
-  FRR16_JALRC<nd_, 1, 0, (outs), (ins ra_pseudo_reg:$pseudo, CPU16Opnd:$rx),
+  FRR16_JALRC<nd_, 1, 0, (outs ra_pseudo_reg:$pseudo), (ins CPU16Opnd:$rx),
               !strconcat(asmstr, "\t$pseudo, $rx"), [], itin> ;
 
 let rx=0 in
@@ -1142,7 +1142,6 @@ def JalrRaRx16: FRR16_JALRC_RaRx_ins<0, "jalr", IIM16Alu> {
   let isCall = 1;
   let isTerminator = 0;
   let isBarrier = 1;
-  let Defs = [RA];
   let DecoderMethod = "DecodeJalrRaRxMips16";
 }
 
@@ -1153,7 +1152,6 @@ def JalrcRaRx16: FRR16_JALRC_RaRx_ins<1, "jalrc", IIM16Alu> {
   let isCall = 1;
   let isTerminator = 0;
   let isBarrier = 1;
-  let Defs = [RA];
   let DecoderMethod = "DecodeJalrRaRxMips16";
 }
 
@@ -1972,8 +1970,15 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 }
 
 // Jump and Link (Call)
-def : Mips16Pat<(MipsJmpLink CPU16Regs:$rx),
-                (JalrcRaRx16 RA, CPU16Regs:$rx)>;
+def JumpLinkReg16 :
+  MipsPseudo16<(outs), (ins CPU16Opnd:$rx), "", [(MipsJmpLink CPU16Opnd:$rx)]>,
+  PseudoInstExpansion<(JalrcRaRx16 RA, CPU16Opnd:$rx)> {
+  let isCall = 1;
+  let hasDelaySlot = 0;
+  let isBarrier = 1;
+  let Defs = [RA];
+}
+
 
 // Mips16 pseudos
 let isReturn=1, isTerminator=1, hasDelaySlot=1, isBarrier=1, hasCtrlDep=1,

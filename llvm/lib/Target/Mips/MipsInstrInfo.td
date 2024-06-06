@@ -929,7 +929,7 @@ def uimm2_plus1 : Operand<i32> {
 // A 3-bit shift value for MIPS16 and MicroMIPS 16-bit instructions in which
 // a shift amount of 8 is encoded as 0.
 def uimm3_shift : Operand<i32> {
-  let EncoderMethod = "getUImm3ShiftEncoding";
+  let EncoderMethod = "getUImm3Mod8Encoding";
   let DecoderMethod = "DecodeUImm3Shift";
   let ParserMatchClass = ConstantUImm3Plus1AsmOperandClass;
 }

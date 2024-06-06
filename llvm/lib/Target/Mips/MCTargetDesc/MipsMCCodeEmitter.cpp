@@ -1207,7 +1207,7 @@ MipsMCCodeEmitter::getSimm18Lsl3Encoding(const MCInst &MI, unsigned OpNo,
 }
 
 unsigned
-MipsMCCodeEmitter::getUImm3ShiftEncoding(const MCInst &MI, unsigned OpNo,
+MipsMCCodeEmitter::getUImm3Mod8Encoding(const MCInst &MI, unsigned OpNo,
                                         SmallVectorImpl<MCFixup> &Fixups,
                                         const MCSubtargetInfo &STI) const {
   assert(MI.getOperand(OpNo).isImm());

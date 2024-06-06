@@ -6346,6 +6346,9 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_UImm3_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 3-bit unsigned immediate");
+  case Match_UImm3_1:
+    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
+                 "expected immediate in range 1 ... 8");
   case Match_UImm4_0:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "expected 4-bit unsigned immediate");

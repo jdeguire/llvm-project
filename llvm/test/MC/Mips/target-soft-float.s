@@ -310,8 +310,7 @@ foo:
   round.w.s  $f2, $f2
   # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   sdc1       $f2, 16($7)
-  # FIXME: SDC1 is correctly rejected but the wrong error message is emitted.
-  # 32: :[[@LINE-2]]:19: error: invalid operand for instruction
+  # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   sqrt.d     $f2, $f2
   # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   sqrt.s     $f2, $f2
@@ -321,8 +320,7 @@ foo:
   sub.s      $f2, $f2, $f2
   # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   swc1       $f2, 16($7)
-  # FIXME: SWC1 is correctly rejected but the wrong error message is emitted.
-  # 32: :[[@LINE-2]]:19: error: invalid operand for instruction
+  # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   trunc.w.d  $f2, $f2
   # 32: :[[@LINE-1]]:3: error: instruction requires a CPU feature not currently enabled
   trunc.w.s  $f2, $f2
