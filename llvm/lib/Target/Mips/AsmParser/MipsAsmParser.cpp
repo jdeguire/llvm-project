@@ -6298,6 +6298,7 @@ bool MipsAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
       return true;
     return false;
   case Match_MissingFeature:
+    // FIXME: other targets list the required features. Do that here, too.
     Error(IDLoc, "instruction requires a CPU feature not currently enabled");
     return true;
   case Match_InvalidTiedOperand:
